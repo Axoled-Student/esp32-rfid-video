@@ -1,0 +1,117 @@
+name: 轉檔影片
+
+# 什麼時候會跑：
+#   1. raw/ 資料夾有新影片推上來
+#   2. 你在 Actions 頁面手動按按鈕
+on:
+  push:
+    paths:
+      - 'raw/**'
+  workflow_dispatch:
+
+# 給 workflow 寫回 repo 的權限
+permissions:
+  contents: write
+
+# 同時只跑一個，避免兩次上傳打架
+concurrency:
+  group: convert-videos
+  cancel-in-progress: false
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 下載 repo
+        uses: actions/checkout@v4
+
+      - name: 安裝 ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -1
+
+      - name: 轉檔 raw/ -> videos/
+        run: |
+          mkdir -p videos
+          converted=0
+          skipped=0
+
+          # raw/ 裡找 1~8 開頭的影片，不管副檔名是什麼
+          for n in 1 2 3 4 5 6 7 8; do
+            # 找 raw/1.* 這種檔案（排除說明用的 .md）
+            src=""
+            for f in raw/$n.*; do
+              [ -e "$f" ] || continue
+              case "$f" in
+                *.md|*.txt|*.gitkeep) continue ;;
+              esac
+              src="$f"
+              break
+            done
+
+            if [ -z "$src" ]; then
+              echo "⊘ 第 $n 部：raw/ 裡沒有找到，跳過"
+              skipped=$((skipped+1))
+              continue
+            fi
+
+            echo "▶ 第 $n 部：$src  ->  videos/$n.mp4"
+
+            # -crf 26        畫質/檔案大小平衡（數字越大越小越糊）
+            # -vf scale      限制最大 1280x720，並確保長寬是偶數（H.264 要求）
+            # -movflags      讓影片可以邊下載邊播（網頁必備）
+            # -pix_fmt       確保所有瀏覽器都能解碼
+            ffmpeg -y -i "$src" \
+              -c:v libx264 -preset medium -crf 26 \
+              -vf "scale='min(1280,iw)':-2" \
+              -pix_fmt yuv420p \
+              -c:a aac -b:a 128k -ac 2 \
+              -movflags +faststart \
+              "videos/$n.mp4"
+
+            size=$(du -h "videos/$n.mp4" | cut -f1)
+            echo "✓ 第 $n 部完成，大小 $size"
+            converted=$((converted+1))
+          done
+
+          echo ""
+          echo "===================================="
+          echo "  轉檔完成 $converted 部，跳過 $skipped 部"
+          echo "===================================="
+
+      - name: 檢查檔案大小
+        run: |
+          over=0
+          for f in videos/*.mp4; do
+            [ -e "$f" ] || continue
+            bytes=$(stat -c%s "$f")
+            mb=$((bytes / 1048576))
+            if [ "$bytes" -gt 104857600 ]; then
+              echo "❌ $f 有 ${mb}MB，超過 GitHub 的 100MB 上限"
+              over=$((over+1))
+            else
+              echo "✓ $f  ${mb}MB"
+            fi
+          done
+
+          if [ "$over" -gt 0 ]; then
+            echo ""
+            echo "有 $over 個檔案太大。請把來源影片剪短一點，或在 convert.yml 把 -crf 26 調成 30。"
+            exit 1
+          fi
+
+      - name: 推回 repo
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add videos/
+
+          if git diff --staged --quiet; then
+            echo "沒有變化，不需要 commit"
+          else
+            git commit -m "自動轉檔：更新 videos/ [skip ci]"
+            git push
+            echo "✓ 已推回 repo，GitHub Pages 會在 1~2 分鐘後更新"
+          fi
