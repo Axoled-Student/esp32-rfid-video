@@ -6,14 +6,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#000000">
-<title>刷卡播放</title>
+<title>刷卡展示</title>
 <script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
 
   html, body {
     height:100%; overflow:hidden; background:#000;
-    -webkit-user-select:none; user-select:none;
     -webkit-tap-highlight-color:transparent;
     touch-action:manipulation;
   }
@@ -23,12 +22,28 @@
     font-family:system-ui,-apple-system,"Microsoft JhengHei","PingFang TC",sans-serif;
   }
 
+  /* ── 影片 ── */
   video {
-    position:fixed; inset:0;
-    width:100%; height:100%;
-    object-fit:contain; background:#000;
-    display:block;
+    position:fixed; inset:0; width:100%; height:100%;
+    object-fit:contain; background:#000; display:none;
   }
+  video.on { display:block; }
+
+  /* ── 網站 ──
+     iframe 用 100% 撐滿，平板轉向、鍵盤跳出來都會自己跟著變。
+     這樣不管 iPad 直的橫的，網站都是滿版。 */
+  /* 網站用 iframe 嵌，撐滿整個畫面。
+     平板轉向、鍵盤跳出來都會自己跟著變，所以 iPad 直的橫的都是滿版。
+     ⚠ 這裡不要用 transform:scale 做動畫 —— 放大會讓 iframe 溢出畫面邊緣，
+       改用往上浮的方式，尺寸才會精準等於視窗。 */
+  #site {
+    position:fixed; inset:0; width:100%; height:100%;
+    border:0; background:#fff; display:none; z-index:1;
+    opacity:0;
+    transition:opacity .6s ease;
+  }
+  #site.on   { display:block; }
+  #site.show { opacity:1; }
 
   /* 全螢幕蓋板的共同底色 */
   .screen {
@@ -85,63 +100,202 @@
     50%     { transform:scaleY(1);   opacity:1; }
   }
 
-  /* ── 影片標題 ── */
+  /* ── 載入中 —— 刷卡後的過場，順便把章節名秀出來 ── */
+  #loading {
+    z-index:35; gap:0; display:none;
+    background:radial-gradient(circle at 50% 42%, #16161f 0%, #000 72%);
+  }
+  #loading.on { display:flex; }
+
+  /* 卡片圖示：一張卡滑進感應區的感覺 */
+  #loading .card-icon {
+    width:58px; height:38px; border-radius:6px;
+    background:linear-gradient(135deg, #3b82f6, #60a5fa);
+    position:relative; margin-bottom:26px;
+    animation:cardIn .55s cubic-bezier(.16,1,.3,1);
+    box-shadow:0 8px 30px rgba(59,130,246,.4);
+  }
+  /* 卡片上的感應波紋 */
+  #loading .card-icon::after {
+    content:''; position:absolute; inset:0; border-radius:6px;
+    border:2px solid #60a5fa;
+    animation:ripple 1.6s ease-out infinite;
+  }
+  @keyframes cardIn {
+    from { transform:translateY(26px) rotate(-8deg); opacity:0; }
+    to   { transform:translateY(0) rotate(0); opacity:1; }
+  }
+  @keyframes ripple {
+    0%   { transform:scale(1);   opacity:.9; }
+    100% { transform:scale(2.1); opacity:0; }
+  }
+
+  #loading .ch {
+    font-size:.8rem; letter-spacing:.22em; color:#3b82f6;
+    font-weight:700; margin-bottom:8px;
+    animation:riseUp .5s .1s both cubic-bezier(.16,1,.3,1);
+  }
+  #loading .name {
+    font-size:clamp(1.5rem, 4.5vw, 2.1rem); font-weight:600;
+    letter-spacing:.02em; margin-bottom:30px;
+    animation:riseUp .5s .18s both cubic-bezier(.16,1,.3,1);
+  }
+  @keyframes riseUp {
+    from { transform:translateY(14px); opacity:0; }
+    to   { transform:translateY(0);    opacity:1; }
+  }
+
+  /* 進度條：不知道還要多久，所以用來回跑的那種 */
+  #loading .track {
+    width:min(230px, 55vw); height:3px; border-radius:99px;
+    background:#22222c; overflow:hidden;
+    animation:riseUp .5s .26s both;
+  }
+  #loading .track > i {
+    display:block; height:100%; width:38%; border-radius:99px;
+    background:linear-gradient(90deg, transparent, #3b82f6, transparent);
+    animation:sweep 1.3s ease-in-out infinite;
+  }
+  @keyframes sweep {
+    0%   { transform:translateX(-100%); }
+    100% { transform:translateX(320%); }
+  }
+
+  #loading .label {
+    color:#5c5c68; font-size:.83rem; margin-top:16px;
+    animation:riseUp .5s .32s both;
+  }
+
+  /* ── 開不起來時的提示 ── */
+  #oops { z-index:45; gap:16px; display:none; background:#0a0a0c; }
+  #oops.on { display:flex; }
+  #oops .mark { font-size:2.4rem; }
+  #oops h2 { font-size:1.3rem; font-weight:600; }
+  #oops p { color:#8b8b96; font-size:.92rem; max-width:420px; line-height:1.8; }
+  #oops a {
+    margin-top:8px; padding:13px 26px; border-radius:9px;
+    background:#3b82f6; color:#fff; text-decoration:none;
+    font-size:.95rem; font-weight:600;
+  }
+
+  /* ── 網站出現時，一道光從上掃過 ──
+     蓋在 iframe 上面、不影響它的尺寸，純粹讓切換有精神一點。 */
+  #sweep {
+    position:fixed; inset:0; z-index:20;
+    pointer-events:none; display:none;
+    background:linear-gradient(180deg,
+      rgba(59,130,246,0)    0%,
+      rgba(59,130,246,.05) 46%,
+      rgba(147,197,253,.11) 50%,
+      rgba(59,130,246,.05) 54%,
+      rgba(59,130,246,0)  100%);
+  }
+  #sweep.go {
+    display:block;
+    animation:sweepDown .7s cubic-bezier(.4,0,.2,1) forwards;
+  }
+  @keyframes sweepDown {
+    from { transform:translateY(-100%); opacity:1; }
+    to   { transform:translateY(100%);  opacity:0; }
+  }
+
+  /* ── 標題（浮在下方，幾秒後淡掉）── */
   #title {
     position:fixed; left:0; right:0; bottom:0; z-index:40;
     padding:80px 34px 34px;
+    padding-bottom:calc(34px + env(safe-area-inset-bottom));
     font-size:1.3rem; font-weight:500; letter-spacing:.02em;
     background:linear-gradient(transparent, rgba(0,0,0,.9));
     opacity:0; transition:opacity .5s; pointer-events:none;
-    padding-bottom:calc(34px + env(safe-area-inset-bottom));
+    text-shadow:0 2px 12px rgba(0,0,0,.9);
   }
   #title.show { opacity:1; }
 
-  /* ── 右上角連線狀態 ── */
-  #conn {
+  /* 網站模式下標題要浮在網頁上面，加個底讓字看得清楚 */
+  #title.on-site {
+    background:linear-gradient(transparent, rgba(0,0,0,.8));
+  }
+
+  /* ── 角落控制項 ── */
+  .corner {
     position:fixed; z-index:50;
-    top:calc(14px + env(safe-area-inset-top)); right:16px;
+    top:calc(14px + env(safe-area-inset-top));
     display:flex; align-items:center; gap:8px;
-    padding:7px 14px; border-radius:99px;
+    padding:8px 14px; border-radius:99px;
     font-size:.78rem; color:#8b8b96;
-    background:rgba(20,20,24,.7); backdrop-filter:blur(10px);
-    border:1px solid rgba(255,255,255,.06);
-    transition:opacity .6s;
+    background:rgba(20,20,24,.78); backdrop-filter:blur(12px);
+    border:1px solid rgba(255,255,255,.07);
+    transition:opacity .6s; cursor:pointer;
+    -webkit-user-select:none; user-select:none;
   }
-  #conn .led {
-    width:7px; height:7px; border-radius:50%; background:#5c5c68;
-  }
+  .corner:hover { color:#ececf0; }
+
+  #conn { right:16px; cursor:default; }
+  #conn .led { width:7px; height:7px; border-radius:50%; background:#5c5c68; }
   #conn.ok  .led { background:#34d399; box-shadow:0 0 8px #34d399; }
   #conn.bad .led { background:#f87171; }
   #conn.busy .led { background:#fbbf24; animation:blink 1.1s infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 
-  /* ── 左上角全螢幕鈕（移動滑鼠／碰畫面才出現）── */
-  #fs {
-    position:fixed; z-index:50;
-    top:calc(14px + env(safe-area-inset-top)); left:16px;
-    padding:7px 14px; border-radius:99px;
-    font-size:.78rem; color:#8b8b96; cursor:pointer;
-    background:rgba(20,20,24,.7); backdrop-filter:blur(10px);
-    border:1px solid rgba(255,255,255,.06);
-    transition:opacity .6s;
-  }
-  #fs:hover { color:#ececf0; }
+  #fs   { left:16px; }
+  #home { left:112px; display:none; }
+  #home.on { display:flex; }
 
   /* 閒置時把角落的東西藏起來，展示畫面才乾淨 */
-  body.calm #conn,
-  body.calm #fs { opacity:0; pointer-events:none; }
-  body.calm    { cursor:none; }
+  body.calm .corner { opacity:0; pointer-events:none; }
+  body.calm { cursor:none; }
+
+  /* ── 頂部喚醒條 ──
+     網站是用 iframe 嵌的，滑鼠在上面移動我們收不到事件，
+     角落的按鈕淡掉之後就再也叫不回來。
+     所以在最上緣留一條看不見的感應區，碰到就把控制項叫出來。 */
+  #wake {
+    position:fixed; top:0; left:0; right:0; height:64px;
+    z-index:48;              /* 要比 iframe 高，但比角落按鈕低 */
+    display:none;
+  }
+  #wake.on { display:block; }
+
+  /* 控制項亮著的時候，喚醒條就別擋路了，讓人直接點按鈕 */
+  body:not(.calm) #wake { pointer-events:none; }
 </style>
 </head>
 <body>
 
+<!-- 影片模式 -->
 <video id="player" playsinline webkit-playsinline preload="auto"></video>
+
+<!-- 網站模式 -->
+<iframe id="site"
+        referrerpolicy="no-referrer"
+        allow="autoplay; encrypted-media; fullscreen; clipboard-write"
+        sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"></iframe>
 
 <!-- 待機 -->
 <div class="screen" id="idle">
   <div class="wave off" id="wave"><i></i><i></i><i></i><i></i></div>
   <h1>請刷卡</h1>
-  <p class="sub" id="idleMsg">感應卡片後自動播放</p>
+  <p class="sub" id="idleMsg">感應卡片後自動開啟</p>
+</div>
+
+<!-- 載入中（刷卡後的過場）-->
+<div class="screen" id="loading">
+  <div class="card-icon"></div>
+  <div class="ch"   id="loadingCh">CHAPTER</div>
+  <div class="name" id="loadingName">載入中</div>
+  <div class="track"><i></i></div>
+  <div class="label" id="loadingLabel">正在開啟…</div>
+</div>
+
+<!-- 開不起來 -->
+<div class="screen" id="oops">
+  <div class="mark">🚫</div>
+  <h2 id="oopsTitle">這個網站不允許被嵌入</h2>
+  <p id="oopsText">
+    有些網站（像維基百科電腦版、YouTube）會擋住被放進其他頁面。
+    可以按下面的按鈕直接開啟。
+  </p>
+  <a id="oopsLink" href="#" target="_blank" rel="noopener">用新分頁開啟</a>
 </div>
 
 <!-- 點一下解鎖（最上層，點掉之後就不再出現）-->
@@ -151,21 +305,29 @@
   <p>iPad 需要先碰一下畫面，影片才能出聲音</p>
 </div>
 
-<div id="conn"><span class="led"></span><span id="connText">連線中</span></div>
-<div id="fs">⛶ 全螢幕</div>
+<div id="sweep"></div>
+<div id="wake"></div>
+
+<div class="corner" id="conn"><span class="led"></span><span id="connText">連線中</span></div>
+<div class="corner" id="fs">⛶ 全螢幕</div>
+<div class="corner" id="home">↩ 回待機</div>
 <div id="title"></div>
 
 <script src="assets/config.js"></script>
 <script>
-const player = $('#player');
-const idle   = $('#idle');
-const unlock = $('#unlock');
-const title  = $('#title');
-const conn   = $('#conn');
+const player  = $('#player');
+const site    = $('#site');
+const idle    = $('#idle');
+const unlock  = $('#unlock');
+const loading = $('#loading');
+const oops    = $('#oops');
+const title   = $('#title');
+const conn    = $('#conn');
 
-let ready   = false;   // 使用者碰過畫面了沒（碰過才准出聲）
+let ready   = false;   // 使用者碰過畫面了沒
 let lastKey = null;    // 上一則訊息的識別碼，用來擋重複
-let playing = false;   // 正在播影片中
+let mode    = 'idle';  // idle | video | site
+let siteTimer = null;
 
 /* ══════════════════════════════════════════════════════
  *  連線
@@ -192,7 +354,7 @@ client.on('message', (_t, payload) => {
   if (d.type === 'status' || d.type === 'online') {
     $('#idleMsg').textContent = d.online === false
       ? '讀卡機未連線'
-      : '感應卡片後自動播放';
+      : '感應卡片後自動開啟';
     return;
   }
 
@@ -208,11 +370,11 @@ client.on('message', (_t, payload) => {
   const n = Number(d.video);
   if (!Number.isInteger(n) || n < 1 || n > CONFIG.COUNT) return;
 
-  if (ready) play(n);
+  if (ready) open(n);
 });
 
 function setConn(cls, text) {
-  conn.className = cls;
+  conn.className = 'corner ' + cls;
   $('#connText').textContent = text;
   $('#wave').className = cls === 'ok' ? 'wave' : 'wave off';
 }
@@ -227,60 +389,156 @@ unlock.addEventListener('click', async () => {
 
   // 在「手勢當下」真的播一次影片，瀏覽器才會把這個播放器記成
   // 「使用者允許的」，之後刷卡才叫得動它。
-  // 先靜音播第 1 部再馬上停掉，順便把開頭先載進來，刷卡時反應更快。
   try {
     player.muted = true;
-    player.src   = `videos/1.mp4`;
+    player.src   = 'videos/1.mp4';
     await player.play();
     player.pause();
     player.currentTime = 0;
   } catch { /* 沒載到也沒關係，不影響後面 */ }
   player.muted = false;
+  player.removeAttribute('src');
+  player.load();
 
   keepAwake();
 });
 
 /* ══════════════════════════════════════════════════════
- *  播放
+ *  刷卡 → 開啟
  * ══════════════════════════════════════════════════════ */
 
-function play(n) {
-  idle.classList.add('hide');
-  playing = true;
+function open(n) {
+  const card = cardOf(n);
 
-  title.textContent = CONFIG.TITLES[n - 1] || `影片 ${n}`;
+  idle.classList.add('hide');
+  oops.classList.remove('on');
+  clearTimeout(siteTimer);
+
+  // 標題浮出來，幾秒後淡掉
+  title.textContent = card.title || `第 ${n} 張`;
   title.classList.add('show');
+  title.classList.toggle('on-site', card.type === 'site');
   setTimeout(() => title.classList.remove('show'), 3500);
+
+  if (card.type === 'site') openSite(card, n);
+  else                     playVideo(n);
+}
+
+/* ── 開網站 ─────────────────────────────────────────── */
+
+function openSite(card, n) {
+  mode = 'site';
+
+  player.pause();
+  player.classList.remove('on');
+
+  // 標題長得像「CHAPTER 05 · 打耳祭」，拆成上下兩行比較好看
+  const parts = (card.title || '').split('·');
+  $('#loadingCh').textContent   = (parts[0] || `第 ${n} 張`).trim();
+  $('#loadingName').textContent = (parts[1] || card.title || '').trim();
+  $('#loadingLabel').textContent = '正在開啟…';
+
+  // 重播進場動畫（不然第二次刷卡就沒動畫了）
+  loading.classList.remove('on');
+  void loading.offsetWidth;
+  loading.classList.add('on');
+
+  $('#home').classList.add('on');
+  $('#wake').classList.add('on');
+
+  let loaded = false;
+
+  site.onload = () => {
+    loaded = true;
+    clearTimeout(siteTimer);
+
+    // 網站載好了，但先讓過場動畫走完，太快閃掉反而毛躁
+    setTimeout(() => {
+      loading.classList.remove('on');
+      site.classList.add('show');
+
+      // 一道光掃過，讓切換有精神一點
+      const sw = $('#sweep');
+      sw.classList.remove('go');
+      void sw.offsetWidth;
+      sw.classList.add('go');
+    }, 550);
+  };
+
+  site.classList.remove('show');
+  site.src = card.url;
+  site.classList.add('on');
+
+  // 有些網站會擋住被嵌入，這時候 iframe 是空白的、也不會觸發 onload。
+  // 等 12 秒還沒動靜就當作被擋，給一個「用新分頁開啟」的出路。
+  siteTimer = setTimeout(() => {
+    if (loaded) return;
+    loading.classList.remove('on');
+    $('#oopsLink').href = card.url;
+    $('#oopsTitle').textContent = '這個網站開不起來';
+    $('#oopsText').textContent =
+      '可能是網站不允許被嵌入，或是網路太慢。可以按下面的按鈕直接開啟。';
+    oops.classList.add('on');
+  }, 12000);
+}
+
+/* ── 播影片 ─────────────────────────────────────────── */
+
+function playVideo(n) {
+  mode = 'video';
+
+  site.classList.remove('on', 'show');
+  site.removeAttribute('src');
+  loading.classList.remove('on');
+  $('#home').classList.remove('on');
+  $('#wake').classList.remove('on');
+
+  player.classList.add('on');
 
   const src = `videos/${n}.mp4`;
 
   // 同一部再刷一次 = 從頭重播，不用重載
-  if (player.src.endsWith(src) && player.readyState > 0) {
+  if (player.getAttribute('src') === src && player.readyState > 0) {
     player.currentTime = 0;
   } else {
     player.src = src;
     player.load();
   }
 
-  player.play().catch(() => {
-    // 極少數情況（例如剛好斷網）播不起來，回待機而不是卡住
-    backToIdle('影片播不起來，請再刷一次');
-  });
+  player.play().catch(() => backToIdle('影片播不起來，請再刷一次'));
 }
 
+/* ── 回待機 ─────────────────────────────────────────── */
+
 function backToIdle(msg) {
-  playing = false;
+  mode = 'idle';
+  clearTimeout(siteTimer);
+
+  player.pause();
+  player.classList.remove('on');
+
+  site.classList.remove('on', 'show');
+  site.removeAttribute('src');
+
+  loading.classList.remove('on');
+  oops.classList.remove('on');
+  $('#home').classList.remove('on');
+  $('#wake').classList.remove('on');
+
   idle.classList.remove('hide');
   title.classList.remove('show');
+
   if (msg) $('#idleMsg').textContent = msg;
 }
+
+$('#home').addEventListener('click', e => { e.stopPropagation(); backToIdle(); });
 
 player.addEventListener('ended', () => backToIdle());
 
 player.addEventListener('error', () => {
   // 沒有設 src 的時候瀏覽器也會丟 error，那個不是真的失敗，要忽略
   if (!player.getAttribute('src')) return;
-  if (!playing) return;
+  if (mode !== 'video') return;
   backToIdle('影片載入失敗，請確認已上傳');
 });
 
@@ -307,7 +565,7 @@ $('#fs').addEventListener('click', e => {
   else document.documentElement.requestFullscreen?.().catch(() => {});
 });
 
-// 閒置 3 秒就把角落的東西淡掉，畫面留給影片
+// 閒置 3 秒就把角落的東西淡掉，畫面留給內容
 let calmTimer;
 function stayAlert() {
   document.body.classList.remove('calm');
@@ -317,6 +575,19 @@ function stayAlert() {
 ['mousemove', 'touchstart', 'keydown'].forEach(ev =>
   document.addEventListener(ev, stayAlert, { passive: true })
 );
+
+// 頂部喚醒條：碰到就把控制項叫出來。
+// 網站是用 iframe 嵌的，滑鼠移到上面我們收不到事件，
+// 控制項淡掉之後就叫不回來了，所以在最上緣留一條感應區。
+['mouseover', 'mouseenter', 'touchstart', 'pointerdown'].forEach(ev =>
+  $('#wake').addEventListener(ev, stayAlert, { passive: true })
+);
+
+// iframe 被點到時瀏覽器會把焦點移過去，這也代表有人在操作
+window.addEventListener('blur', () => {
+  if (document.activeElement === site) stayAlert();
+});
+
 stayAlert();
 
 // 展示現場防呆：右鍵選單、雙指縮放都關掉

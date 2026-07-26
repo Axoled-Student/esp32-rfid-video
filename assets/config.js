@@ -20,17 +20,76 @@ const CONFIG = {
 
   // ── 影片數量 ──────────────────────────────────────────
   COUNT: 8,
-
-  // ── 影片標題 ──────────────────────────────────────────
-  // 播放時會浮在畫面下方，順序對應第 1 ~ 8 部。想改成作品名就改這裡。
-  TITLES: [
-    '影片 1', '影片 2', '影片 3', '影片 4',
-    '影片 5', '影片 6', '影片 7', '影片 8',
-  ],
 };
+
+
+/* ══════════════════════════════════════════════════════════
+ *  8 張卡各自要做什麼
+ *  ─────────────────────────────────────────────────────────
+ *  type: 'site'  → 刷卡打開網站
+ *        'video' → 刷卡播放 videos/N.mp4
+ *
+ *  之後拿到正式網址，把下面的 url 換掉就好，其他都不用動。
+ *
+ *  ⚠ 有些網站不准被嵌入（維基百科的電腦版、YouTube、Google…），
+ *    畫面會一片空白。維基百科要用手機版 zh.m.wikipedia.org 才行。
+ *    不確定的話，先在播放頁刷刷看，不能嵌的會跳提示。
+ * ══════════════════════════════════════════════════════════ */
+
+CONFIG.CARDS = [
+  // 第 1 張
+  {
+    type:  'site',
+    title: 'CHAPTER 01 · 布農族',
+    url:   'https://zh.m.wikipedia.org/wiki/布農族',
+  },
+  // 第 2 張
+  {
+    type:  'site',
+    title: 'CHAPTER 02 · 布農語',
+    url:   'https://zh.m.wikipedia.org/wiki/布農語',
+  },
+  // 第 3 張
+  {
+    type:  'site',
+    title: 'CHAPTER 03 · 八部合音',
+    url:   'https://zh.m.wikipedia.org/wiki/八部合音',
+  },
+  // 第 4 張
+  {
+    type:  'site',
+    title: 'CHAPTER 04 · 小米',
+    url:   'https://zh.m.wikipedia.org/wiki/小米',
+  },
+  // 第 5 張 ← 這張是正式的，其他都還是佔位
+  {
+    type:  'site',
+    title: 'CHAPTER 05 · 打耳祭',
+    url:   'https://decisive-mind-768702.framer.app/demov2',
+  },
+  // 第 6 張
+  {
+    type:  'site',
+    title: 'CHAPTER 06 · 射耳祭',
+    url:   'https://zh.m.wikipedia.org/wiki/射耳祭',
+  },
+  // 第 7 張
+  {
+    type:  'site',
+    title: 'CHAPTER 07 · 祖靈',
+    url:   'https://zh.m.wikipedia.org/wiki/祖靈',
+  },
+  // 第 8 張
+  {
+    type:  'site',
+    title: 'CHAPTER 08 · 玉山',
+    url:   'https://zh.m.wikipedia.org/wiki/玉山',
+  },
+];
 
 // 訂閱／發布用的頻道名稱
 CONFIG.TOPIC = 'esp32rfid/' + CONFIG.ROOM;
+
 
 /* ── 小工具，各頁共用 ──────────────────────────────────── */
 
@@ -39,6 +98,11 @@ const $$ = s => [...document.querySelectorAll(s)];
 
 // 1 ~ COUNT 的陣列，拿來跑迴圈
 const SLOTS = Array.from({ length: CONFIG.COUNT }, (_, i) => i + 1);
+
+// 拿第 n 張卡的設定（n 從 1 開始）。沒設定的就當成影片。
+function cardOf(n) {
+  return CONFIG.CARDS[n - 1] || { type: 'video', title: `影片 ${n}` };
+}
 
 // 建立 MQTT 連線（各頁設定一致，避免各寫各的）
 function connectMqtt(prefix) {

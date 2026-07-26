@@ -3,60 +3,75 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>影片測試頁</title>
+<title>內容測試頁</title>
 <link rel="stylesheet" href="assets/style.css">
 <style>
-  /* 播放器 */
+  /* 預覽區 */
   .stage {
     background:#000; border-radius:var(--r-lg); overflow:hidden;
     border:1px solid var(--line-soft); margin-bottom:18px;
-    position:relative;
+    position:relative; aspect-ratio:16/10;
   }
-  .stage video { width:100%; aspect-ratio:16/9; display:block; background:#000; }
+  .stage video, .stage iframe {
+    position:absolute; inset:0;
+    width:100%; height:100%; border:0; display:none; background:#000;
+  }
+  .stage video.on, .stage iframe.on { display:block; }
+  .stage iframe { background:#fff; }
 
-  /* 還沒選影片時蓋在上面的提示 */
   .stage .placeholder {
     position:absolute; inset:0;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:10px; color:var(--text-mute); font-size:.92rem;
-    background:#000; pointer-events:none; transition:opacity .3s;
+    background:#0a0a0c; pointer-events:none; transition:opacity .3s;
   }
   .stage .placeholder .big { font-size:2rem; opacity:.5; }
-  .stage.playing .placeholder { opacity:0; }
+  .stage.busy .placeholder { opacity:0; }
 
-  /* 影片格子 */
+  /* 卡片格子 */
   .slot {
     background:var(--surface); border:1px solid var(--line-soft);
-    border-radius:var(--r); padding:14px 12px; cursor:pointer;
-    text-align:center; transition:.15s; position:relative;
+    border-radius:var(--r); padding:13px 12px; cursor:pointer;
+    text-align:left; transition:.15s; position:relative;
   }
   .slot:hover { border-color:var(--line); background:var(--surface-2); }
 
-  .slot .num {
-    font-size:1.7rem; font-weight:700; line-height:1.2;
-    color:var(--text-mute); transition:color .15s;
+  .slot .top {
+    display:flex; align-items:center; gap:8px; margin-bottom:5px;
   }
-  .slot .state { font-size:.78rem; color:var(--text-mute); margin-top:2px; }
+  .slot .num {
+    font-size:1.15rem; font-weight:700; color:var(--text-mute);
+    line-height:1; transition:color .15s;
+  }
+  .slot .kind {
+    font-size:.66rem; font-weight:700; letter-spacing:.06em;
+    padding:2px 7px; border-radius:99px;
+    background:var(--surface-2); border:1px solid var(--line);
+    color:var(--text-mute);
+  }
+  .slot .name {
+    font-size:.82rem; color:var(--text-dim); line-height:1.45;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .slot .state { font-size:.72rem; color:var(--text-mute); margin-top:3px; }
 
-  /* 有影片 */
-  .slot.ready { border-color:#1c5c3a; background:#0d1a13; }
-  .slot.ready .num   { color:var(--ok); }
-  .slot.ready .state { color:#86efac; }
+  /* 網站卡 */
+  .slot.site .kind { background:#101828; border-color:#1e3a5f; color:#93c5fd; }
+  .slot.site .num  { color:#60a5fa; }
 
-  /* 沒影片 */
-  .slot.missing { border-color:#4a2020; background:#1a0f10; }
-  .slot.missing .num   { color:#a85555; }
-  .slot.missing .state { color:#e59a9a; }
+  /* 影片卡 */
+  .slot.video.ready .kind { background:#0d1f16; border-color:#1c5c3a; color:#86efac; }
+  .slot.video.ready .num  { color:var(--ok); }
+  .slot.video.ready .state { color:#86efac; }
 
-  /* 正在檢查 */
-  .slot.checking .state { color:var(--warn); }
+  .slot.video.missing { border-color:#4a2020; background:#1a0f10; }
+  .slot.video.missing .num   { color:#a85555; }
+  .slot.video.missing .state { color:#e59a9a; }
 
-  /* 目前播放中 */
   .slot.active {
     border-color:var(--accent);
     box-shadow:0 0 0 1px var(--accent), 0 4px 16px rgba(59,130,246,.18);
   }
-  .slot.active .num { color:var(--accent); }
 
   .summary {
     display:flex; align-items:center; gap:10px; flex-wrap:wrap;
@@ -68,6 +83,12 @@
   }
   .pill.ok  { background:#0d1f16; border-color:#1c5c3a; color:#86efac; }
   .pill.bad { background:#241315; border-color:#7f2222; color:#fca5a5; }
+
+  .openlink {
+    font-size:.82rem; color:var(--accent); text-decoration:none;
+    margin-left:auto;
+  }
+  .openlink:hover { text-decoration:underline; }
 </style>
 </head>
 <body>
@@ -75,29 +96,34 @@
 <div class="wrap">
 
   <div class="head">
-    <h1>影片測試頁</h1>
-    <p>確認 8 部影片都上傳好了，能播 = ESP32 那邊也抓得到。</p>
+    <h1>內容測試頁</h1>
+    <p>確認 8 張卡的內容都正常，能開 = ESP32 那邊刷卡也會正常。</p>
   </div>
 
   <div class="card">
     <div class="stage" id="stage">
       <video id="player" controls playsinline preload="metadata"></video>
+      <iframe id="site" referrerpolicy="no-referrer"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
       <div class="placeholder">
         <div class="big">▶</div>
-        <div>點下面的格子播放</div>
+        <div>點下面的卡片預覽</div>
       </div>
     </div>
 
     <div class="summary" id="summary">
       <span class="pill" id="pill">檢查中…</span>
-      <span id="summaryText">正在確認每一部影片的狀態</span>
+      <span id="summaryText">正在確認每一張卡的內容</span>
+      <a class="openlink" id="openLink" href="#" target="_blank" rel="noopener" style="display:none">
+        在新分頁開啟 ↗
+      </a>
     </div>
 
     <div class="grid" id="slots"></div>
   </div>
 
   <div class="nav">
-    <a href="play.html">▶ 刷卡播放頁</a>
+    <a href="play.html">▶ 刷卡展示頁</a>
     <a href="upload.html">↑ 上傳／換影片</a>
     <a href="模擬刷卡.html">⊹ 模擬刷卡</a>
   </div>
@@ -108,42 +134,82 @@
 <script src="assets/config.js"></script>
 <script>
 const player = $('#player');
+const site   = $('#site');
 const stage  = $('#stage');
 const slots  = $('#slots');
 
 let current = null;
 
-/* ── 建立 8 個格子 ─────────────────────────────────────── */
+/* ── 建立 8 張卡 ───────────────────────────────────────── */
 
 SLOTS.forEach(n => {
+  const card = cardOf(n);
+  const isSite = card.type === 'site';
+
   const d = document.createElement('div');
-  d.className = 'slot checking';
+  d.className = 'slot ' + (isSite ? 'site' : 'video');
   d.id = 'slot' + n;
-  d.innerHTML = `<div class="num">${n}</div><div class="state">檢查中</div>`;
-  d.onclick = () => playSlot(n);
+  d.innerHTML = `
+    <div class="top">
+      <span class="num">${n}</span>
+      <span class="kind">${isSite ? '網站' : '影片'}</span>
+    </div>
+    <div class="name">${card.title || '第 ' + n + ' 張'}</div>
+    <div class="state">${isSite ? '點一下預覽' : '檢查中'}</div>`;
+  d.title = isSite ? card.url : `videos/${n}.mp4`;
+  d.onclick = () => preview(n);
   slots.appendChild(d);
 });
 
-function playSlot(n) {
+/* ── 預覽 ──────────────────────────────────────────────── */
+
+function preview(n) {
+  const card = cardOf(n);
+
   $$('.slot').forEach(s => s.classList.remove('active'));
   $('#slot' + n).classList.add('active');
-  stage.classList.add('playing');
+  stage.classList.add('busy');
   current = n;
 
-  player.src = `videos/${n}.mp4`;
-  player.play().catch(() => {});
+  if (card.type === 'site') {
+    player.pause();
+    player.classList.remove('on');
+    site.src = card.url;
+    site.classList.add('on');
+
+    const link = $('#openLink');
+    link.href = card.url;
+    link.style.display = 'inline';
+
+  } else {
+    site.classList.remove('on');
+    site.removeAttribute('src');
+    $('#openLink').style.display = 'none';
+
+    player.classList.add('on');
+    player.src = `videos/${n}.mp4`;
+    player.play().catch(() => {});
+  }
 }
 
-/* ── 檢查每一部影片在不在 ──────────────────────────────
- * 用 HEAD 只問「檔案在不在、多大」，不會真的下載影片，
- * 所以 8 部一起查也很快、不吃流量。
+/* ── 檢查影片卡在不在 ──────────────────────────────────
+ * 用 HEAD 只問「檔案在不在、多大」，不會真的下載影片。
+ * 網站卡不用檢查（跨域擋著，查了也是白查）。
  * ──────────────────────────────────────────────────── */
 
-let okCount = 0, badCount = 0;
+let okCount = 0, badCount = 0, siteCount = 0;
 
 async function checkAll() {
   await Promise.all(SLOTS.map(async n => {
+    const card = cardOf(n);
     const el = $('#slot' + n);
+
+    if (card.type === 'site') {
+      siteCount++;
+      el.querySelector('.state').textContent = shortUrl(card.url);
+      return;
+    }
+
     try {
       const r = await fetch(`videos/${n}.mp4`, { method: 'HEAD', cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
@@ -152,24 +218,31 @@ async function checkAll() {
 
       // 檔案在，但小得不像影片 = 大概是佔位用的空檔
       if (bytes > 0 && bytes < 20000) {
-        el.className = 'slot missing';
+        el.classList.add('missing');
         el.querySelector('.state').textContent = '疑似空檔';
         badCount++;
         return;
       }
 
-      el.className = 'slot ready';
+      el.classList.add('ready');
       el.querySelector('.state').textContent = bytes ? fmtSize(bytes) : '可播放';
       okCount++;
 
     } catch {
-      el.className = 'slot missing';
+      el.classList.add('missing');
       el.querySelector('.state').textContent = '沒有影片';
       badCount++;
     }
   }));
 
   showSummary();
+}
+
+function shortUrl(u) {
+  try {
+    const x = new URL(u);
+    return x.hostname.replace(/^www\.|^zh\.m\./, '') + decodeURIComponent(x.pathname).slice(0, 18);
+  } catch { return u.slice(0, 30); }
 }
 
 function fmtSize(bytes) {
@@ -181,25 +254,32 @@ function showSummary() {
   const pill = $('#pill');
   const text = $('#summaryText');
 
+  const parts = [];
+  if (siteCount) parts.push(`${siteCount} 張網站`);
+  if (okCount)   parts.push(`${okCount} 張影片`);
+
   if (badCount === 0) {
     pill.className = 'pill ok';
-    pill.textContent = `${okCount} / ${CONFIG.COUNT} 就緒`;
-    text.textContent = '全部正常，ESP32 那邊可以直接用了。';
+    pill.textContent = `${CONFIG.COUNT} 張就緒`;
+    text.textContent = parts.join('、') + '，全部正常。';
   } else {
     pill.className = 'pill bad';
-    pill.textContent = `${okCount} / ${CONFIG.COUNT} 就緒`;
-    text.innerHTML = `有 ${badCount} 部還沒好，<a href="upload.html" style="color:var(--accent)">去上傳面板補上</a>。`;
+    pill.textContent = `${siteCount + okCount} / ${CONFIG.COUNT} 就緒`;
+    text.innerHTML = `${parts.join('、')}，有 ${badCount} 張影片還沒好，` +
+      `<a href="upload.html" style="color:var(--accent)">去上傳面板補上</a>。`;
   }
 }
 
 checkAll();
 
-/* ── 播放失敗時，把那一格標成紅的 ──────────────────────── */
+/* ── 播放失敗時標紅 ────────────────────────────────────── */
 
 player.addEventListener('error', () => {
   if (!player.getAttribute('src') || current === null) return;
+  if (cardOf(current).type !== 'video') return;
   const el = $('#slot' + current);
-  el.className = 'slot missing active';
+  el.classList.remove('ready');
+  el.classList.add('missing');
   el.querySelector('.state').textContent = '播放失敗';
 });
 </script>

@@ -97,9 +97,11 @@ const boot = Math.random().toString(36).slice(2, 8);
 
 const pad = $('#pad');
 SLOTS.forEach(n => {
+  const card = cardOf(n);
   const b = document.createElement('button');
   b.textContent = n;
   b.disabled = true;
+  b.title = card.title || `第 ${n} 張`;      // 滑鼠移上去看得到是什麼
   b.onclick = () => send(n, b);
   pad.appendChild(b);
 });
@@ -166,7 +168,7 @@ function send(n, btn) {
   void btn.offsetWidth;          // 強制重跑動畫
   btn.classList.add('sent');
 
-  log(`送出 → 播放第 ${n} 部`, 'ok');
+  log(`送出 → ${cardOf(n).title || '第 ' + n + ' 張'}`, 'ok');
 }
 </script>
 </body>

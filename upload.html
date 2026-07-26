@@ -93,6 +93,7 @@
   <!-- 步驟 2 -->
   <div class="card">
     <h2><span class="step">2</span>選影片</h2>
+    <div id="siteNote" class="callout" style="margin-top:0;margin-bottom:14px;display:none"></div>
     <div class="grid" id="slots"></div>
     <p class="hint">點格子選檔案，或直接把影片拖進來。不用 8 部都換，換幾部選幾部。單檔上限 100MB。</p>
   </div>
@@ -243,6 +244,33 @@ async function markOnline(n) {
 }
 
 SLOTS.forEach(markOnline);
+
+/* ── 目前有幾張卡設定成開網站？提醒一下，免得傳了才發現沒用到 ── */
+
+const siteCards = SLOTS.filter(n => cardOf(n).type === 'site');
+
+if (siteCards.length) {
+  const note = $('#siteNote');
+  note.style.display = 'block';
+
+  if (siteCards.length === CONFIG.COUNT) {
+    note.innerHTML =
+      '目前 <b>8 張卡全部設定成開網站</b>，刷卡時不會播影片。' +
+      '這裡上傳的影片會先存著，之後在 <code>assets/config.js</code> 把某張卡改成 ' +
+      '<code>type: \'video\'</code> 就會用到。';
+  } else {
+    note.innerHTML =
+      `第 ${siteCards.join('、')} 張設定成開網站，這幾張傳影片不會生效。` +
+      '要改的話開 <code>assets/config.js</code>。';
+  }
+
+  // 網站卡的格子淡一點，一眼看得出差別
+  siteCards.forEach(n => {
+    const el = $('#slot' + n);
+    el.style.opacity = '.45';
+    el.title = '這張卡目前設定成開網站：' + (cardOf(n).url || '');
+  });
+}
 
 /* ══════════════════════════════════════════════════════
  *  記錄

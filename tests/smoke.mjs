@@ -1,12 +1,34 @@
 /**
- * 四個頁面的實測腳本
+ * 四個頁面的基本功能測試
  * 跑法：node tests/smoke.mjs
  * （需要先在專案根目錄開 http-server -p 8899）
+ *
+ * 注意：8 張卡目前都設定成開網站（見 assets/config.js），
+ * 但影片功能還留著，所以這裡會把第 1、2 張「暫時」改成影片模式來測。
+ * 只改瀏覽器記憶體裡的設定，不會動到檔案。
+ * 網站節點的測試在 tests/sites.mjs。
  */
 import { chromium } from 'playwright';
 
 const BASE = 'http://127.0.0.1:8899';
 const results = [];
+
+/* 把第 1、2 張卡暫時改成影片模式，這樣才測得到播放功能。
+ * 只改瀏覽器記憶體裡的設定，不會動到 assets/config.js。
+ *
+ * 頁面一載入 config.js 就會建好 8 個格子，所以要趕在那之前改掉：
+ * 攔截 config.js 的回應，把 CARDS 換成影片版再交給頁面。 */
+async function useVideoCards(page) {
+  await page.route('**/assets/config.js', async route => {
+    const res = await route.fetch();
+    let js = await res.text();
+    js += `
+      CONFIG.CARDS[0] = { type: 'video', title: '影片 1' };
+      CONFIG.CARDS[1] = { type: 'video', title: '影片 2' };
+    `;
+    await route.fulfill({ response: res, body: js });
+  });
+}
 
 function check(name, pass, detail = '') {
   results.push({ name, pass, detail });
@@ -33,7 +55,8 @@ const errors = [];
 {
   const page = await ctx.newPage();
   watch(page, 'index', errors);
-  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await useVideoCards(page);
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
 
   const slots = await page.locator('.slot').count();
   check('測試頁：8 個格子', slots === 8, `實際 ${slots}`);
@@ -45,8 +68,8 @@ const errors = [];
   );
 
   const pill  = await page.locator('#pill').textContent();
-  const ready = await page.locator('.slot.ready').count();
-  check('測試頁：偵測到影片', ready > 0, `${pill}，就緒 ${ready} 部`);
+  const ready = await page.locator('.slot.video.ready').count();
+  check('測試頁：偵測到影片', ready === 2, `${pill}，影片卡就緒 ${ready} 張`);
 
   // 實際播第 1 部（就是剛上傳那部 39MB 的）
   await page.locator('#slot1').click();
@@ -76,6 +99,7 @@ const errors = [];
 {
   const page = await ctx.newPage();
   watch(page, 'play', errors);
+  await useVideoCards(page);
   await page.goto(BASE + '/play.html', { waitUntil: 'domcontentloaded' });
 
   // 不應該再有房間代號輸入框
@@ -134,13 +158,14 @@ const errors = [];
       time: v.currentTime,
       paused: v.paused,
       w: v.videoWidth,
+      visible: v.classList.contains('on'),      // 影片模式才會顯示 video
       idleHidden: document.querySelector('#idle').classList.contains('hide'),
       title: document.querySelector('#title').textContent,
     };
   });
 
   check('端對端：刷卡 → 播放頁開始播',
-    played.time > 0 && !played.paused && played.w > 0,
+    played.time > 0 && !played.paused && played.w > 0 && played.visible,
     `${played.src} 已播 ${played.time.toFixed(1)}s，標題「${played.title}」`);
 
   check('播放頁：播放時待機畫面淡出', played.idleHidden);
