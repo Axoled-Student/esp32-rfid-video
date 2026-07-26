@@ -14,19 +14,22 @@ const BASE = 'http://127.0.0.1:8899';
 const results = [];
 
 /* 把第 1、2 張卡暫時改成影片模式，這樣才測得到播放功能。
- * 只改瀏覽器記憶體裡的設定，不會動到 assets/config.js。
+ * 只改瀏覽器收到的資料，不會動到 assets/cards.json。
  *
- * 頁面一載入 config.js 就會建好 8 個格子，所以要趕在那之前改掉：
- * 攔截 config.js 的回應，把 CARDS 換成影片版再交給頁面。 */
+ * 卡片設定是從 cards.json 載入的，所以攔截那個請求就好。 */
 async function useVideoCards(page) {
-  await page.route('**/assets/config.js', async route => {
+  await page.route('**/assets/cards.json*', async route => {
     const res = await route.fetch();
-    let js = await res.text();
-    js += `
-      CONFIG.CARDS[0] = { type: 'video', title: '影片 1' };
-      CONFIG.CARDS[1] = { type: 'video', title: '影片 2' };
-    `;
-    await route.fulfill({ response: res, body: js });
+    const data = JSON.parse(await res.text());
+
+    data.cards[0] = { type: 'video', title: '影片 1' };
+    data.cards[1] = { type: 'video', title: '影片 2' };
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(data),
+    });
   });
 }
 
@@ -58,6 +61,8 @@ const errors = [];
   await useVideoCards(page);
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
 
+  // 格子要等 cards.json 載進來才會建
+  await page.waitForSelector('.slot', { timeout: 10000 });
   const slots = await page.locator('.slot').count();
   check('測試頁：8 個格子', slots === 8, `實際 ${slots}`);
 
@@ -190,21 +195,24 @@ const errors = [];
 {
   const page = await ctx.newPage();
   watch(page, 'upload', errors);
-  await page.goto(BASE + '/upload.html', { waitUntil: 'networkidle' });
+  await page.goto(BASE + '/upload.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.cardrow', { timeout: 10000 });
 
-  const slots = await page.locator('.slot').count();
-  check('上傳頁：8 個格子', slots === 8);
+  const rows = await page.locator('.cardrow').count();
+  check('設定台：列出 8 張卡', rows === 8, `${rows} 列`);
 
-  // 應該會標出網站上已經有的影片
-  await page.waitForTimeout(3000);
-  const online = await page.locator('.slot.online').count();
-  check('上傳頁：標出已存在的影片', online > 0, `${online} 部`);
+  // 每列都要有標題欄和模式切換
+  const titles = await page.locator('.cardrow .t-in').count();
+  const toggles = await page.locator('.cardrow .toggle').count();
+  check('設定台：每列都能編輯', titles === 8 && toggles === 8);
 
-  // 沒填金鑰按上傳應該要擋下來
-  page.once('dialog', d => d.accept());
+  // 沒填金鑰按儲存應該要擋下來
+  const alerts = [];
+  page.on('dialog', async d => { alerts.push(d.message()); await d.accept(); });
   await page.locator('#go').click();
-  await page.waitForTimeout(500);
-  check('上傳頁：沒金鑰時擋住上傳', true);
+  await page.waitForTimeout(600);
+  check('設定台：沒金鑰時擋住儲存',
+    alerts.some(a => a.includes('金鑰')), alerts[0] || '(沒跳提示)');
 
   await page.screenshot({ path: 'tests/shot-upload.png', fullPage: true });
   await page.close();

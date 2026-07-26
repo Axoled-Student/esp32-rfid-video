@@ -1,5 +1,8 @@
 /* ══════════════════════════════════════════════════════════
  *  全站設定 —— 要改東西，改這裡就好
+ *
+ *  8 張卡各自開什麼，不在這裡 —— 在 assets/cards.json，
+ *  用設定面板（upload.html）改比較方便，不用碰程式碼。
  * ══════════════════════════════════════════════════════════ */
 
 const CONFIG = {
@@ -13,79 +16,17 @@ const CONFIG = {
   // 免費公共伺服器，讓平板跟 ESP32 不用連同一個 Wi-Fi
   MQTT_URL: 'wss://broker.hivemq.com:8884/mqtt',
 
-  // ── GitHub 倉庫（上傳面板用）──────────────────────────
+  // ── GitHub 倉庫（設定面板用）──────────────────────────
   OWNER:  'vin836',
   REPO:   'esp32-rfid-video',
   BRANCH: 'main',
 
-  // ── 影片數量 ──────────────────────────────────────────
+  // ── 卡片數量 ──────────────────────────────────────────
   COUNT: 8,
+
+  // 卡片設定，開頁時從 cards.json 載進來
+  CARDS: [],
 };
-
-
-/* ══════════════════════════════════════════════════════════
- *  8 張卡各自要做什麼
- *  ─────────────────────────────────────────────────────────
- *  type: 'site'  → 刷卡打開網站
- *        'video' → 刷卡播放 videos/N.mp4
- *
- *  之後拿到正式網址，把下面的 url 換掉就好，其他都不用動。
- *
- *  ⚠ 有些網站不准被嵌入（維基百科的電腦版、YouTube、Google…），
- *    畫面會一片空白。維基百科要用手機版 zh.m.wikipedia.org 才行。
- *    不確定的話，先在播放頁刷刷看，不能嵌的會跳提示。
- * ══════════════════════════════════════════════════════════ */
-
-CONFIG.CARDS = [
-  // 第 1 張
-  {
-    type:  'site',
-    title: 'CHAPTER 01 · 布農族',
-    url:   'https://zh.m.wikipedia.org/wiki/布農族',
-  },
-  // 第 2 張
-  {
-    type:  'site',
-    title: 'CHAPTER 02 · 布農語',
-    url:   'https://zh.m.wikipedia.org/wiki/布農語',
-  },
-  // 第 3 張
-  {
-    type:  'site',
-    title: 'CHAPTER 03 · 八部合音',
-    url:   'https://zh.m.wikipedia.org/wiki/八部合音',
-  },
-  // 第 4 張
-  {
-    type:  'site',
-    title: 'CHAPTER 04 · 小米',
-    url:   'https://zh.m.wikipedia.org/wiki/小米',
-  },
-  // 第 5 張 ← 這張是正式的，其他都還是佔位
-  {
-    type:  'site',
-    title: 'CHAPTER 05 · 打耳祭',
-    url:   'https://decisive-mind-768702.framer.app/demov2',
-  },
-  // 第 6 張
-  {
-    type:  'site',
-    title: 'CHAPTER 06 · 射耳祭',
-    url:   'https://zh.m.wikipedia.org/wiki/射耳祭',
-  },
-  // 第 7 張
-  {
-    type:  'site',
-    title: 'CHAPTER 07 · 祖靈',
-    url:   'https://zh.m.wikipedia.org/wiki/祖靈',
-  },
-  // 第 8 張
-  {
-    type:  'site',
-    title: 'CHAPTER 08 · 玉山',
-    url:   'https://zh.m.wikipedia.org/wiki/玉山',
-  },
-];
 
 // 訂閱／發布用的頻道名稱
 CONFIG.TOPIC = 'esp32rfid/' + CONFIG.ROOM;
@@ -112,4 +53,30 @@ function connectMqtt(prefix) {
     connectTimeout:  10000,
     clean:           true,
   });
+}
+
+
+/* ══════════════════════════════════════════════════════════
+ *  載入卡片設定
+ *
+ *  每一頁都要先 await loadCards() 再開始建畫面，
+ *  否則會拿到空的設定。
+ * ══════════════════════════════════════════════════════════ */
+
+async function loadCards() {
+  try {
+    // 加時間戳記，避免瀏覽器拿到舊的快取（剛改完設定馬上要看到）
+    const r = await fetch('assets/cards.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+
+    const data = await r.json();
+    if (Array.isArray(data.cards)) CONFIG.CARDS = data.cards;
+
+  } catch (e) {
+    // 讀不到就全部當影片處理，至少不會整頁掛掉
+    console.warn('讀取 cards.json 失敗，改用預設值', e);
+    CONFIG.CARDS = SLOTS.map(n => ({ type: 'video', title: `影片 ${n}` }));
+  }
+
+  return CONFIG.CARDS;
 }

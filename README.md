@@ -7,8 +7,8 @@
 | 頁面 | 網址 | 用途 |
 |---|---|---|
 | **展示頁** | https://vin836.github.io/esp32-rfid-video/play.html | 展示用，平板開這個 |
+| **設定台** | https://vin836.github.io/esp32-rfid-video/upload.html | 改每張卡開什麼 |
 | 測試頁 | https://vin836.github.io/esp32-rfid-video/ | 確認 8 張卡的內容都正常 |
-| 上傳面板 | https://vin836.github.io/esp32-rfid-video/upload.html | 換影片 |
 | 模擬刷卡 | https://vin836.github.io/esp32-rfid-video/模擬刷卡.html | 板子還沒接好時測試用 |
 
 ## 目前 8 張卡的設定
@@ -29,22 +29,25 @@
 
 ### 怎麼換網址
 
-開 `assets/config.js`，找到 `CONFIG.CARDS`，把對應那張的 `url` 換掉就好：
+開 **設定台** https://vin836.github.io/esp32-rfid-video/upload.html
 
-```js
-{
-  type:  'site',                       // 'site' 開網站，'video' 播影片
-  title: 'CHAPTER 01 · 布農族',        // 刷卡時顯示的標題
-  url:   'https://你的網址',
-},
-```
+1. 貼上金鑰（第一次要弄，之後瀏覽器會記住）
+2. 直接改那一列的網址、標題
+3. 按「儲存設定」
 
-改完推上 GitHub，1~2 分鐘後生效。
+1~2 分鐘後所有平板都會吃到新設定，不用改程式碼。
+
+每張卡可以自己選 **網站** 或 **影片**：
+- 選「網站」→ 填網址
+- 選「影片」→ 點方框選檔案（或把影片拖進那一列）
 
 > **⚠ 有些網站不准被嵌入**，畫面會一片空白。
 > 維基百科要用手機版 `zh.m.wikipedia.org`（電腦版會被擋）。
-> YouTube、Google 也不能直接嵌。不確定的話先在展示頁刷刷看，
-> 開不起來會跳出提示，可以按按鈕用新分頁開。
+> YouTube、Google 也不能直接嵌。
+> 設定台每一列都有「試」按鈕可以先確認；
+> 展示時開不起來也會跳提示，可以按按鈕用新分頁開。
+
+> 設定存在 `assets/cards.json`，想直接改檔案也可以。
 
 ## 運作方式
 
@@ -63,16 +66,21 @@ ESP32 只有 4MB 空間塞不下影片，所以影片放 GitHub、ESP32 只負�
 
 ---
 
-# 一、換影片
+# 一、改內容
 
-1. 開 https://vin836.github.io/esp32-rfid-video/upload.html
-2. 貼上金鑰（第一次要弄，之後瀏覽器會記住）
-3. 點格子選影片，或直接把檔案拖進去
-4. 按「開始上傳」
+全部在 **設定台** 完成：https://vin836.github.io/esp32-rfid-video/upload.html
 
-上傳完雲端會自動轉檔，約 3~5 分鐘，面板上會即時顯示進度。
+1. 貼上金鑰（第一次要弄，之後瀏覽器會記住）
+2. 每張卡選「網站」或「影片」
+   - **網站** → 填網址，可按「試」先確認開得起來
+   - **影片** → 點方框選檔案，或把影片拖進那一列
+3. 標題直接點下去改（刷卡時會顯示在畫面下方）
+4. 按「儲存設定」
 
-**什麼格式都可以** —— mov / avi / mkv / mp4 都吃，雲端會自動轉成網頁能播的格式，
+只改網址的話 1~2 分鐘生效；有傳影片的話雲端會自動轉檔，約 3~5 分鐘，
+面板上會即時顯示進度。
+
+**影片什麼格式都可以** —— mov / avi / mkv / mp4 都吃，雲端會自動轉成網頁能播的格式，
 太大的還會自動壓小。單檔請低於 100MB（GitHub 規定）。
 
 ### 金鑰怎麼拿
@@ -185,11 +193,12 @@ IRQ 腳不用接。
 
 | 路徑 | 用途 |
 |---|---|
-| `play.html` | 播放頁（展示用） |
+| `play.html` | 展示頁（平板開這個） |
+| `upload.html` | 設定台（改每張卡開什麼） |
 | `index.html` | 測試頁 |
-| `upload.html` | 上傳面板 |
 | `模擬刷卡.html` | 模擬刷卡（測試用） |
-| `assets/config.js` | **全站設定**，要改東西改這裡 |
+| `assets/cards.json` | **8 張卡的設定**（設定台會寫這個） |
+| `assets/config.js` | 房間代號、中繼站等系統設定 |
 | `assets/style.css` | 共用樣式 |
 | `esp32_rfid_video/esp32_rfid_video.ino` | 燒進 ESP32 的程式 |
 | `.github/workflows/convert.yml` | 自動轉檔的機器人 |
@@ -199,9 +208,10 @@ IRQ 腳不用接。
 
 ## 想改東西
 
-**每張卡開什麼** —— 改 `assets/config.js` 的 `CONFIG.CARDS`（詳見最上面的說明）。
+**每張卡開什麼** —— 用設定台改就好，不用碰程式碼。
+（想直接改檔案的話是 `assets/cards.json`）
 
-**卡片數量** —— 改 `assets/config.js` 的 `COUNT`，
+**卡片數量** —— 改 `assets/config.js` 的 `COUNT`、`cards.json` 的陣列長度，
 以及 `.ino` 裡的 `CARD_UID` 和 `convert.yml` 裡的 `for n in 1 2 3...`。
 
 **畫質** —— 改 `convert.yml` 最上面的 `CRF`，數字越大檔案越小也越糊。
@@ -245,8 +255,14 @@ IRQ 腳不用接。
 **影片播不出來**
 先開測試頁，它會自動檢查每張卡的內容在不在。
 
-**上傳面板說金鑰無效**
+**設定台說金鑰無效**
 金鑰有期限，過期要重拿一組。權限記得勾 `repo`。
+
+**改了設定但平板上還是舊的**
+GitHub Pages 更新要 1~2 分鐘。過了還是舊的就重新整理一次平板。
+
+**設定台按了儲存但沒反應**
+看下面的記錄視窗有沒有紅字。常見是金鑰過期，或某張卡的網址沒填。
 
 ---
 
@@ -258,6 +274,7 @@ IRQ 腳不用接。
 npx http-server -p 8899 -c-1     # 另開一個終端機
 
 node tests/sites.mjs              # 測 8 張卡的網站節點（iPad 尺寸）
+node tests/panel.mjs              # 測設定台的存檔流程
 node tests/smoke.mjs              # 測四個網頁的基本功能
 node tests/setup-page.mjs         # 測 ESP32 設定畫面
 ```

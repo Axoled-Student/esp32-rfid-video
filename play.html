@@ -329,6 +329,10 @@ let lastKey = null;    // 上一則訊息的識別碼，用來擋重複
 let mode    = 'idle';  // idle | video | site
 let siteTimer = null;
 
+// 先把 8 張卡的設定讀進來。刷卡時要知道每張卡開什麼，
+// 沒讀完就刷卡會拿到空設定，所以這裡先擋著。
+const cardsReady = loadCards();
+
 /* ══════════════════════════════════════════════════════
  *  連線
  * ══════════════════════════════════════════════════════ */
@@ -370,7 +374,8 @@ client.on('message', (_t, payload) => {
   const n = Number(d.video);
   if (!Number.isInteger(n) || n < 1 || n > CONFIG.COUNT) return;
 
-  if (ready) open(n);
+  // 設定還沒讀完就先等一下，不然會開錯東西
+  if (ready) cardsReady.then(() => open(n));
 });
 
 function setConn(cls, text) {

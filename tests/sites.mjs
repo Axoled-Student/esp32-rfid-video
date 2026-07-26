@@ -226,10 +226,13 @@ await idx.screenshot({ path: 'tests/shot-index-sites.png', fullPage: true });
 
 const up = await ctx.newPage();
 await up.goto(BASE + '/upload.html', { waitUntil: 'domcontentloaded' });
-await up.waitForTimeout(2500);
-const noteVisible = await up.locator('#siteNote').isVisible();
-check('上傳頁：提醒有網站卡', noteVisible,
-  (await up.locator('#siteNote').innerText()).slice(0, 46));
+await up.waitForSelector('.cardrow', { timeout: 10000 });
+
+const rows = await up.locator('.cardrow').count();
+check('設定台：列出 8 張卡', rows === 8, `${rows} 列`);
+
+const siteRows = await up.locator('.cardrow.site').count();
+check('設定台：反映目前設定', siteRows === 8, `${siteRows} 張是網站`);
 
 await up.screenshot({ path: 'tests/shot-upload-sites.png', fullPage: true });
 

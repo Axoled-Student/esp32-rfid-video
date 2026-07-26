@@ -140,8 +140,11 @@ const slots  = $('#slots');
 
 let current = null;
 
-/* ── 建立 8 張卡 ───────────────────────────────────────── */
+/* ── 建立 8 張卡（要先把設定讀進來）────────────────────── */
 
+loadCards().then(buildSlots).then(checkAll);
+
+function buildSlots() {
 SLOTS.forEach(n => {
   const card = cardOf(n);
   const isSite = card.type === 'site';
@@ -160,6 +163,7 @@ SLOTS.forEach(n => {
   d.onclick = () => preview(n);
   slots.appendChild(d);
 });
+}
 
 /* ── 預覽 ──────────────────────────────────────────────── */
 
@@ -269,8 +273,6 @@ function showSummary() {
       `<a href="upload.html" style="color:var(--accent)">去上傳面板補上</a>。`;
   }
 }
-
-checkAll();
 
 /* ── 播放失敗時標紅 ────────────────────────────────────── */
 

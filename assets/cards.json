@@ -1,0 +1,45 @@
+{
+  "_說明": "8 張卡各自要做什麼。可以直接改這裡，也可以用設定面板改（upload.html）。",
+  "cards": [
+    {
+      "type": "site",
+      "title": "CHAPTER 01 · 布農族",
+      "url": "https://zh.m.wikipedia.org/wiki/布農族"
+    },
+    {
+      "type": "site",
+      "title": "CHAPTER 02 · 布農語",
+      "url": "https://zh.m.wikipedia.org/wiki/布農語"
+    },
+    {
+      "type": "site",
+      "title": "CHAPTER 03 · 八部合音",
+      "url": "https://zh.m.wikipedia.org/wiki/八部合音"
+    },
+    {
+      "type": "site",
+      "title": "CHAPTER 04 · 小米",
+      "url": "https://zh.m.wikipedia.org/wiki/小米"
+    },
+    {
+      "type": "site",
+      "title": "CHAPTER 05 · 打耳祭",
+      "url": "https://decisive-mind-768702.framer.app/demov2"
+    },
+    {
+      "type": "site",
+      "title": "CHAPTER 06 · 射耳祭",
+      "url": "https://zh.m.wikipedia.org/wiki/射耳祭"
+    },
+    {
+      "type": "site",
+      "title": "CHAPTER 07 · 祖靈",
+      "url": "https://zh.m.wikipedia.org/wiki/祖靈"
+    },
+    {
+      "type": "site",
+      "title": "CHAPTER 08 · 玉山",
+      "url": "https://zh.m.wikipedia.org/wiki/玉山"
+    }
+  ]
+}

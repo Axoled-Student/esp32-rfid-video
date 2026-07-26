@@ -3,68 +3,141 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>影片上傳面板</title>
+<title>卡片設定台</title>
 <link rel="stylesheet" href="assets/style.css">
 <style>
-  .keyrow { display:flex; gap:9px; flex-wrap:wrap; }
+  .wrap { max-width: 860px; }
 
-  /* 已存金鑰時的小綠勾 */
+  .keyrow { display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
   .keyrow .saved {
     display:none; align-items:center; gap:6px;
     font-size:.85rem; color:var(--ok);
   }
   .keyrow.has .saved { display:flex; }
 
-  /* ── 影片格子 ── */
-  .slot {
-    background:var(--bg); border:1.5px dashed var(--line);
-    border-radius:var(--r); padding:16px 12px; cursor:pointer;
-    text-align:center; transition:.15s; position:relative; overflow:hidden;
-  }
-  .slot:hover  { border-color:var(--accent); background:#101018; }
-  .slot.over   { border-color:var(--accent); background:#101828; border-style:solid; }
+  /* ══ 卡片列表 ══ */
+  .cards { display:flex; flex-direction:column; gap:11px; }
 
-  .slot .num   { font-size:1.7rem; font-weight:700; color:var(--text-mute); line-height:1.2; }
-  .slot .name  {
-    font-size:.76rem; color:var(--text-mute); margin-top:3px;
+  .cardrow {
+    background:var(--bg); border:1px solid var(--line-soft);
+    border-radius:var(--r); padding:14px 15px;
+    transition:border-color .15s, background .15s;
+  }
+  .cardrow:hover  { border-color:var(--line); }
+  .cardrow.over   { border-color:var(--accent); background:#101828; }
+  .cardrow.edited { border-color:#6b4a10; background:#1a1508; }
+  .cardrow.done   { border-color:#1c5c3a; background:#0d1a13; }
+
+  .cardrow .head-row {
+    display:flex; align-items:center; gap:11px; margin-bottom:11px;
+  }
+
+  .cardrow .no {
+    flex:none; width:28px; height:28px; border-radius:8px;
+    background:var(--surface-2); border:1px solid var(--line);
+    display:grid; place-items:center;
+    font-size:.88rem; font-weight:700; color:var(--text-dim);
+  }
+  .cardrow.site .no  { background:#132036; border-color:#1e3a5f; color:#93c5fd; }
+  .cardrow.video .no { background:#0f1f16; border-color:#1c5c3a; color:#86efac; }
+
+  /* 標題輸入 */
+  .cardrow .t-in {
+    flex:1; min-width:120px; padding:7px 10px; font-size:.9rem;
+    font-family:inherit; background:transparent;
+    border:1px solid transparent; border-radius:6px; color:var(--text);
+    font-weight:600;
+  }
+  .cardrow .t-in:hover  { border-color:var(--line-soft); }
+  .cardrow .t-in:focus  { border-color:var(--accent); background:var(--bg); outline:none; }
+
+  /* 模式切換 */
+  .toggle {
+    flex:none; display:flex; background:var(--surface-2);
+    border:1px solid var(--line); border-radius:8px; overflow:hidden;
+  }
+  .toggle button {
+    padding:7px 13px; font-size:.8rem; font-weight:600;
+    background:transparent; color:var(--text-mute);
+    border:none; border-radius:0; white-space:nowrap;
+  }
+  .toggle button:hover:not(.act) { background:#22222c; color:var(--text-dim); }
+  .toggle button.act { background:var(--accent); color:#fff; }
+
+  /* 內容區：網址或檔案 */
+  .body-row { display:flex; gap:8px; align-items:center; }
+
+  .u-in {
+    flex:1; min-width:0; padding:9px 11px; font-size:.85rem;
+    font-family:ui-monospace,"SF Mono",Menlo,monospace;
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:7px; color:var(--text);
+  }
+  .u-in:focus { outline:none; border-color:var(--accent); }
+  .u-in.bad   { border-color:#7f2222; background:#1a0f10; }
+
+  .pickbtn {
+    flex:none; padding:9px 15px; font-size:.85rem;
+    background:var(--surface-2); border:1px solid var(--line); color:var(--text);
+  }
+  .pickbtn:hover { background:#26262e; }
+
+  .filebox {
+    flex:1; min-width:0; padding:9px 11px; font-size:.85rem;
+    background:var(--surface); border:1px dashed var(--line);
+    border-radius:7px; color:var(--text-mute);
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    cursor:pointer;
   }
+  .filebox:hover { border-color:var(--accent); color:var(--text-dim); }
+  .filebox.has   { border-style:solid; border-color:#1c5c3a; color:#86efac; }
 
-  /* 已選檔案 */
-  .slot.picked { border-style:solid; border-color:#1c5c3a; background:#0d1a13; }
-  .slot.picked .num  { color:var(--ok); }
-  .slot.picked .name { color:#86efac; }
-
-  /* 網站上已經有的影片 */
-  .slot.online { border-style:solid; border-color:var(--line); }
-  .slot.online .num  { color:var(--text-dim); }
-  .slot.online .name { color:var(--text-mute); }
-
-  /* 上傳成功 */
-  .slot.done { border-color:var(--accent); background:#0d1420; }
-  .slot.done .num  { color:var(--accent); }
-  .slot.done .name { color:#93c5fd; }
-
-  /* 右上角的清除鈕 */
-  .slot .clear {
-    position:absolute; top:5px; right:7px;
-    width:20px; height:20px; border-radius:50%;
-    background:rgba(0,0,0,.55); color:var(--text-dim);
-    font-size:.75rem; line-height:20px; display:none;
+  .testbtn {
+    flex:none; padding:9px 12px; font-size:.85rem;
+    background:transparent; border:1px solid var(--line-soft);
+    color:var(--text-mute);
   }
-  .slot.picked .clear { display:block; }
-  .slot .clear:hover  { color:var(--err); background:rgba(0,0,0,.8); }
+  .testbtn:hover { color:var(--accent); border-color:var(--accent); }
+
+  /* 狀態小字 */
+  .cardrow .note {
+    font-size:.76rem; color:var(--text-mute); margin-top:7px;
+    display:none;
+  }
+  .cardrow .note.on { display:block; }
+  .cardrow .note.warn { color:var(--warn); }
+  .cardrow .note.err  { color:var(--err); }
+  .cardrow .note.ok   { color:var(--ok); }
 
   #progress { display:none; margin-top:18px; }
 
   .callout {
-    padding:13px 15px; border-radius:var(--r-sm); font-size:.88rem;
+    padding:13px 15px; border-radius:var(--r-sm); font-size:.87rem;
     background:var(--surface-2); border:1px solid var(--line-soft);
-    color:var(--text-dim); margin-top:14px;
+    color:var(--text-dim); margin-top:14px; line-height:1.75;
   }
-  .callout a { color:var(--accent); text-decoration:none; }
-  .callout a:hover { text-decoration:underline; }
-  .callout.ok { background:#0d1f16; border-color:#1c5c3a; color:#86efac; }
+  .callout a    { color:var(--accent); text-decoration:none; }
+  .callout code {
+    background:var(--bg); padding:1px 5px; border-radius:4px;
+    font-size:.92em; color:var(--text-dim);
+  }
+
+  .bar-note {
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    font-size:.85rem; color:var(--text-mute); margin-bottom:12px;
+  }
+  .chip {
+    padding:3px 9px; border-radius:99px; font-size:.76rem; font-weight:600;
+    background:var(--surface-2); border:1px solid var(--line-soft);
+  }
+  .chip.edit { background:#2a2010; border-color:#6b4a10; color:#fcd34d; }
+
+  @media (max-width:600px) {
+    .cardrow .head-row { flex-wrap:wrap; }
+    .cardrow .t-in { min-width:100%; order:3; }
+    .body-row { flex-wrap:wrap; }
+    .u-in, .filebox { min-width:100%; }
+  }
 </style>
 </head>
 <body>
@@ -72,11 +145,11 @@
 <div class="wrap">
 
   <div class="head">
-    <h1>影片上傳面板</h1>
-    <p>選好影片按上傳，雲端會自動轉檔，什麼格式都吃。</p>
+    <h1>卡片設定台</h1>
+    <p>設定 8 張卡各自要開什麼 —— 網站填網址，影片選檔案。</p>
   </div>
 
-  <!-- 步驟 1 -->
+  <!-- 步驟 1：金鑰 -->
   <div class="card">
     <h2><span class="step">1</span>貼上金鑰</h2>
     <div class="keyrow" id="keyrow">
@@ -86,23 +159,33 @@
     </div>
     <p class="hint">
       金鑰只存在你自己的瀏覽器，不會傳給別人。權限要勾 <code>repo</code>。
-      <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=影片上傳面板" target="_blank" rel="noopener">去拿一組 →</a>
+      <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=卡片設定台" target="_blank" rel="noopener">去拿一組 →</a>
     </p>
   </div>
 
-  <!-- 步驟 2 -->
+  <!-- 步驟 2：設定 8 張卡 -->
   <div class="card">
-    <h2><span class="step">2</span>選影片</h2>
-    <div id="siteNote" class="callout" style="margin-top:0;margin-bottom:14px;display:none"></div>
-    <div class="grid" id="slots"></div>
-    <p class="hint">點格子選檔案，或直接把影片拖進來。不用 8 部都換，換幾部選幾部。單檔上限 100MB。</p>
+    <h2><span class="step">2</span>設定每張卡</h2>
+
+    <div class="bar-note" id="barNote">
+      <span class="chip" id="chipSum">載入中…</span>
+      <span id="sumText"></span>
+    </div>
+
+    <div class="cards" id="cards"></div>
+
+    <p class="hint">
+      網站模式填網址，影片模式點方框選檔案（也可以直接把影片拖進那一列）。
+      標題可以直接點下去改，刷卡時會顯示在畫面下方。
+    </p>
   </div>
 
-  <!-- 步驟 3 -->
+  <!-- 步驟 3：儲存 -->
   <div class="card">
-    <h2><span class="step">3</span>上傳</h2>
+    <h2><span class="step">3</span>儲存</h2>
     <div class="btn-row">
-      <button id="go" style="flex:1;min-width:170px">開始上傳</button>
+      <button id="go" style="flex:1;min-width:170px">儲存設定</button>
+      <button class="ghost" id="reload">重新載入</button>
       <button class="ghost" id="viewActions">看轉檔進度</button>
     </div>
 
@@ -110,11 +193,17 @@
       <div class="bar"><i id="barFill"></i></div>
       <div class="log" id="log"></div>
     </div>
+
+    <div class="callout">
+      <b>網站開不起來？</b>有些網站不准被嵌在別的頁面裡。
+      維基百科要用手機版 <code>zh.m.wikipedia.org</code>（電腦版會被擋），
+      YouTube、Google 也不行。按每一列的「試」可以先確認。
+    </div>
   </div>
 
   <div class="nav">
     <a href="./">◱ 測試頁</a>
-    <a href="play.html">▶ 刷卡播放頁</a>
+    <a href="play.html">▶ 刷卡展示頁</a>
     <a href="模擬刷卡.html">⊹ 模擬刷卡</a>
   </div>
 
@@ -125,7 +214,8 @@
 <script>
 const { OWNER, REPO, BRANCH } = CONFIG;
 
-const files = {};              // { 1: File, 2: File, ... }
+const files    = {};       // { 1: File }  這次要上傳的影片
+const original = {};       // 剛載入時的設定，用來比對有沒有改過
 
 /* ══════════════════════════════════════════════════════
  *  金鑰
@@ -151,142 +241,268 @@ $('#saveKey').onclick = () => {
 $('#viewActions').onclick = () =>
   window.open(`https://github.com/${OWNER}/${REPO}/actions`, '_blank', 'noopener');
 
+$('#reload').onclick = () => location.reload();
+
 /* ══════════════════════════════════════════════════════
- *  8 個格子（點選 + 拖放）
+ *  建立 8 列
  * ══════════════════════════════════════════════════════ */
 
-const slotsEl = $('#slots');
+loadCards().then(build);
 
-SLOTS.forEach(n => {
-  const d = document.createElement('div');
-  d.className = 'slot';
-  d.id = 'slot' + n;
-  d.innerHTML =
-    `<div class="clear" title="取消">✕</div>
-     <div class="num">${n}</div>
-     <div class="name">點這裡選檔案</div>`;
+function build() {
+  const box = $('#cards');
+  box.innerHTML = '';
 
-  d.onclick = e => {
-    if (e.target.classList.contains('clear')) { clearSlot(n); return; }
-    pick(n);
-  };
+  SLOTS.forEach(n => {
+    const c = cardOf(n);
+    original[n] = JSON.stringify(c);
 
-  // 拖放
-  d.addEventListener('dragover', e => {
-    e.preventDefault();
-    d.classList.add('over');
+    const row = document.createElement('div');
+    row.className = 'cardrow ' + (c.type === 'site' ? 'site' : 'video');
+    row.id = 'row' + n;
+
+    row.innerHTML = `
+      <div class="head-row">
+        <span class="no">${n}</span>
+        <input class="t-in" id="t${n}" value="${esc(c.title || '第 ' + n + ' 張')}"
+               placeholder="標題（刷卡時顯示）">
+        <span class="toggle">
+          <button class="mode-site ${c.type === 'site' ? 'act' : ''}">網站</button>
+          <button class="mode-video ${c.type !== 'site' ? 'act' : ''}">影片</button>
+        </span>
+      </div>
+
+      <div class="body-row" id="body${n}"></div>
+      <div class="note" id="note${n}"></div>`;
+
+    row.querySelector('.mode-site').onclick  = () => setMode(n, 'site');
+    row.querySelector('.mode-video').onclick = () => setMode(n, 'video');
+    row.querySelector('.t-in').oninput = () => markEdited(n);
+
+    // 整列都能拖檔案進來
+    row.addEventListener('dragover', e => { e.preventDefault(); row.classList.add('over'); });
+    row.addEventListener('dragleave', () => row.classList.remove('over'));
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      row.classList.remove('over');
+      const f = e.dataTransfer.files[0];
+      if (!f) return;
+      setMode(n, 'video');          // 拖影片進來 = 想用影片模式
+      takeFile(n, f);
+    });
+
+    box.appendChild(row);
+    renderBody(n, c);
   });
-  d.addEventListener('dragleave', () => d.classList.remove('over'));
-  d.addEventListener('drop', e => {
-    e.preventDefault();
-    d.classList.remove('over');
-    const f = e.dataTransfer.files[0];
-    if (f) accept(n, f);
-  });
 
-  slotsEl.appendChild(d);
-});
+  ['dragover', 'drop'].forEach(ev =>
+    document.addEventListener(ev, e => e.preventDefault())
+  );
 
-// 拖到頁面其他地方不要讓瀏覽器直接開檔案
-['dragover', 'drop'].forEach(ev =>
-  document.addEventListener(ev, e => e.preventDefault())
-);
+  updateSummary();
+  SLOTS.forEach(checkVideoOnline);
+}
+
+const esc = s => String(s ?? '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+/* ── 畫出一列的內容區 ─────────────────────────────────── */
+
+function renderBody(n, c) {
+  const body = $('#body' + n);
+
+  if (c.type === 'site') {
+    body.innerHTML = `
+      <input class="u-in" id="u${n}" value="${esc(c.url || '')}"
+             placeholder="https://..." spellcheck="false" autocomplete="off">
+      <button class="testbtn" id="try${n}">試</button>`;
+
+    $('#u' + n).oninput = () => { markEdited(n); validateUrl(n); };
+    $('#try' + n).onclick = () => tryOpen(n);
+    validateUrl(n);
+
+  } else {
+    body.innerHTML = `
+      <div class="filebox" id="f${n}">點這裡選影片，或把檔案拖進來</div>
+      <button class="pickbtn" id="p${n}">選檔案</button>`;
+
+    $('#f' + n).onclick = () => pick(n);
+    $('#p' + n).onclick = () => pick(n);
+
+    if (files[n]) showFile(n, files[n]);
+    else checkVideoOnline(n);
+  }
+}
+
+/* ── 切換模式 ─────────────────────────────────────────── */
+
+function setMode(n, mode) {
+  const row = $('#row' + n);
+  if (row.classList.contains(mode)) return;
+
+  row.classList.remove('site', 'video');
+  row.classList.add(mode);
+
+  row.querySelector('.mode-site').classList.toggle('act', mode === 'site');
+  row.querySelector('.mode-video').classList.toggle('act', mode === 'video');
+
+  renderBody(n, { type: mode, url: currentUrl(n) });
+  markEdited(n);
+  updateSummary();
+}
+
+// 記住使用者填過的網址，切回網站模式時不要不見
+const urlMemo = {};
+function currentUrl(n) {
+  const el = $('#u' + n);
+  if (el) urlMemo[n] = el.value;
+  return urlMemo[n] ?? (cardOf(n).url || '');
+}
+
+/* ── 選檔案 ───────────────────────────────────────────── */
+
+const NOT_VIDEO = /\.(html?|txt|md|pdf|zip|rar|7z|docx?|xlsx?|pptx?|jpe?g|png|gif|webp|svg|mp3|wav|m4a|json|js|css|exe|dmg)$/i;
 
 function pick(n) {
   const inp = document.createElement('input');
   inp.type = 'file';
   inp.accept = 'video/*';
-  inp.onchange = () => { if (inp.files[0]) accept(n, inp.files[0]); };
+  inp.onchange = () => { if (inp.files[0]) takeFile(n, inp.files[0]); };
   inp.click();
 }
 
-// 這些副檔名一定不是影片。拖曳進來的檔案不會經過 accept="video/*"，
-// 所以要在這裡自己擋，不然像 .html 這種東西會被當成影片傳上去。
-const NOT_VIDEO = /\.(html?|txt|md|pdf|zip|rar|7z|docx?|xlsx?|pptx?|jpe?g|png|gif|webp|svg|mp3|wav|m4a|json|js|css|exe|dmg)$/i;
-
-function accept(n, f) {
-  const mb = f.size / 1048576;
-
-  // 副檔名明顯不對，或瀏覽器判定不是影片 → 擋下來
-  const looksWrong = NOT_VIDEO.test(f.name) ||
-                     (f.type && !f.type.startsWith('video/'));
-
-  if (looksWrong) {
+function takeFile(n, f) {
+  // 拖曳進來的檔案不會過 accept="video/*"，要自己擋
+  if (NOT_VIDEO.test(f.name) || (f.type && !f.type.startsWith('video/'))) {
     alert(
       `「${f.name}」看起來不是影片檔。\n\n` +
       '這裡只收影片（mp4 / mov / avi / mkv 等）。\n' +
-      '如果你是想讓刷卡打開某個網站，改 assets/config.js 裡的網址就好，不用上傳檔案。'
+      '如果你是想讓刷卡打開某個網站，把這張卡切成「網站」模式填網址就好。'
     );
     return;
   }
 
+  const mb = f.size / 1048576;
   if (mb > 100) {
     alert(`這個檔案有 ${mb.toFixed(0)}MB，超過 GitHub 的 100MB 上限。\n請把影片剪短，或先壓縮一下。`);
     return;
   }
 
   files[n] = f;
-  const el = $('#slot' + n);
-  el.className = 'slot picked';
-  el.querySelector('.name').textContent = `${f.name} · ${mb.toFixed(1)}MB`;
-  el.querySelector('.name').title = f.name;
+  showFile(n, f);
+  markEdited(n);
 }
 
-function clearSlot(n) {
-  delete files[n];
-  const el = $('#slot' + n);
-  el.className = 'slot';
-  el.querySelector('.name').textContent = '點這裡選檔案';
-  markOnline(n);
+function showFile(n, f) {
+  const el = $('#f' + n);
+  if (!el) return;
+  el.classList.add('has');
+  el.textContent = `${f.name} · ${(f.size / 1048576).toFixed(1)}MB`;
+  el.title = f.name;
 }
 
-/* ── 標出網站上已經有哪幾部（讓人知道哪些不用重傳）──────── */
+/* ── 網站上已經有的影片，標一下 ───────────────────────── */
 
-const onlineSizes = {};
-
-async function markOnline(n) {
+async function checkVideoOnline(n) {
+  if (cardOf(n).type === 'site' && !$('#f' + n)) return;
   if (files[n]) return;
+
+  const el = $('#f' + n);
+  if (!el) return;
+
   try {
     const r = await fetch(`videos/${n}.mp4`, { method: 'HEAD', cache: 'no-store' });
     if (!r.ok) return;
     const bytes = Number(r.headers.get('content-length') || 0);
-    if (bytes < 20000) return;          // 太小，當作沒有
+    if (bytes < 20000) return;
 
-    onlineSizes[n] = bytes;
-    const el = $('#slot' + n);
-    if (el.classList.contains('picked')) return;
-    el.className = 'slot online';
-    el.querySelector('.name').textContent = `目前 ${(bytes / 1048576).toFixed(1)}MB`;
+    if (files[n]) return;
+    el.textContent = `目前 ${(bytes / 1048576).toFixed(1)}MB（不換的話就用這個）`;
   } catch {}
 }
 
-SLOTS.forEach(markOnline);
+/* ── 網址檢查 ─────────────────────────────────────────── */
 
-/* ── 目前有幾張卡設定成開網站？提醒一下，免得傳了才發現沒用到 ── */
+function validateUrl(n) {
+  const el = $('#u' + n);
+  if (!el) return true;
 
-const siteCards = SLOTS.filter(n => cardOf(n).type === 'site');
+  const v = el.value.trim();
+  const note = $('#note' + n);
 
-if (siteCards.length) {
-  const note = $('#siteNote');
-  note.style.display = 'block';
+  if (!v) { el.classList.remove('bad'); note.className = 'note'; return true; }
 
-  if (siteCards.length === CONFIG.COUNT) {
-    note.innerHTML =
-      '目前 <b>8 張卡全部設定成開網站</b>，刷卡時不會播影片。' +
-      '這裡上傳的影片會先存著，之後在 <code>assets/config.js</code> 把某張卡改成 ' +
-      '<code>type: \'video\'</code> 就會用到。';
-  } else {
-    note.innerHTML =
-      `第 ${siteCards.join('、')} 張設定成開網站，這幾張傳影片不會生效。` +
-      '要改的話開 <code>assets/config.js</code>。';
+  let ok = false;
+  try { const u = new URL(v); ok = u.protocol === 'https:' || u.protocol === 'http:'; } catch {}
+
+  el.classList.toggle('bad', !ok);
+
+  if (!ok) {
+    note.className = 'note on err';
+    note.textContent = '網址格式怪怪的，要以 https:// 開頭';
+    return false;
   }
 
-  // 網站卡的格子淡一點，一眼看得出差別
-  siteCards.forEach(n => {
-    const el = $('#slot' + n);
-    el.style.opacity = '.45';
-    el.title = '這張卡目前設定成開網站：' + (cardOf(n).url || '');
-  });
+  // 已知擋嵌入的網站，先提醒
+  if (/^https?:\/\/(zh|en|ja|www)\.wikipedia\.org/i.test(v)) {
+    note.className = 'note on warn';
+    note.innerHTML = '維基百科電腦版不能嵌入，請把網址的 <code>zh.wikipedia.org</code> 改成 <code>zh.m.wikipedia.org</code>';
+  } else if (/youtube\.com\/watch|google\.com\/search/i.test(v)) {
+    note.className = 'note on warn';
+    note.textContent = '這個網站通常不准被嵌入，展示時可能會空白。建議先按「試」確認。';
+  } else {
+    note.className = 'note';
+  }
+  return true;
+}
+
+/* ── 試開一下 ─────────────────────────────────────────── */
+
+function tryOpen(n) {
+  const v = $('#u' + n)?.value.trim();
+  if (!v) { alert('先填網址'); return; }
+  window.open(v, '_blank', 'noopener');
+}
+
+/* ── 標記改過 ─────────────────────────────────────────── */
+
+function markEdited(n) {
+  const row = $('#row' + n);
+  row.classList.remove('done');
+
+  const now = JSON.stringify(readRow(n));
+  row.classList.toggle('edited', now !== original[n] || !!files[n]);
+
+  updateSummary();
+}
+
+function readRow(n) {
+  const row  = $('#row' + n);
+  const mode = row.classList.contains('site') ? 'site' : 'video';
+  const c = {
+    type:  mode,
+    title: $('#t' + n)?.value.trim() || `第 ${n} 張`,
+  };
+  if (mode === 'site') c.url = $('#u' + n)?.value.trim() || '';
+  return c;
+}
+
+function updateSummary() {
+  const changed = SLOTS.filter(n => $('#row' + n)?.classList.contains('edited'));
+  const sites   = SLOTS.filter(n => $('#row' + n)?.classList.contains('site'));
+  const vids    = CONFIG.COUNT - sites.length;
+
+  const chip = $('#chipSum');
+  const txt  = $('#sumText');
+
+  if (changed.length) {
+    chip.className = 'chip edit';
+    chip.textContent = `${changed.length} 張已修改`;
+    txt.textContent = `第 ${changed.join('、')} 張有改動，記得按儲存。`;
+  } else {
+    chip.className = 'chip';
+    chip.textContent = '尚未修改';
+    txt.textContent = `目前 ${sites.length} 張開網站` + (vids ? `、${vids} 張放影片` : '') + '。';
+  }
 }
 
 /* ══════════════════════════════════════════════════════
@@ -300,12 +516,10 @@ function say(msg, cls = '') {
   $('#log').appendChild(line);
   $('#log').scrollTop = $('#log').scrollHeight;
 }
-
 const setBar = pct => $('#barFill').style.width = pct + '%';
 
 /* ══════════════════════════════════════════════════════
  *  檔案 → base64（GitHub API 只收這種格式）
- *  一次讀 2MB，讀完轉完就丟，記憶體才不會爆
  * ══════════════════════════════════════════════════════ */
 
 function toBase64(blob, onProgress) {
@@ -319,11 +533,9 @@ function toBase64(blob, onProgress) {
 
     reader.onload = () => {
       const bytes = new Uint8Array(reader.result);
-      // 一次組 32KB，太多參數 String.fromCharCode 會爆掉
       for (let i = 0; i < bytes.length; i += 32768) {
         binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
       }
-
       offset = Math.min(offset + CHUNK, blob.size);
       onProgress?.(offset / blob.size);
 
@@ -338,13 +550,23 @@ function toBase64(blob, onProgress) {
   });
 }
 
+// 中文字元用 btoa 會爆，要先轉成 UTF-8 位元組
+function utf8ToBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 32768) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
+  }
+  return btoa(binary);
+}
+
 /* ══════════════════════════════════════════════════════
  *  呼叫 GitHub
  * ══════════════════════════════════════════════════════ */
 
 async function gh(path, opts = {}) {
   const token = $('#token').value.trim();
-  const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}${path}`, {
+  return fetch(`https://api.github.com/repos/${OWNER}/${REPO}${path}`, {
     ...opts,
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -353,46 +575,64 @@ async function gh(path, opts = {}) {
       ...(opts.headers || {}),
     },
   });
-  return res;
 }
 
-// 抓錯誤訊息，方便看懂哪裡出問題
 async function ghError(res) {
   const e = await res.json().catch(() => ({}));
   return e.message || `HTTP ${res.status}`;
 }
 
 /* ══════════════════════════════════════════════════════
- *  上傳主流程
+ *  儲存
  *
- *  重點：全部檔案先變成 blob 傳上去，最後「一次」commit。
- *  這樣不管換幾部影片，轉檔機器人都只會被叫醒一次，
- *  也不會出現傳到一半半新半舊的狀態。
+ *  設定檔和影片一起打包成「一次」commit，
+ *  這樣轉檔機器人只會被叫醒一次，也不會有半新半舊的狀態。
  * ══════════════════════════════════════════════════════ */
 
 $('#go').onclick = async () => {
   const token = $('#token').value.trim();
-  const list  = Object.keys(files).map(Number).sort((a, b) => a - b);
+  if (!token) { alert('請先貼上金鑰'); return; }
 
-  if (!token)       { alert('請先貼上金鑰'); return; }
-  if (!list.length) { alert('還沒選任何影片'); return; }
+  // 先檢查網址有沒有問題
+  const bad = SLOTS.filter(n => {
+    const row = $('#row' + n);
+    if (!row.classList.contains('site')) return false;
+    const v = $('#u' + n)?.value.trim();
+    return !v || !validateUrl(n);
+  });
+
+  if (bad.length) {
+    alert(`第 ${bad.join('、')} 張的網址還沒填好。`);
+    return;
+  }
+
+  const cards   = SLOTS.map(readRow);
+  const upload  = Object.keys(files).map(Number)
+                    .filter(n => cards[n - 1].type === 'video')
+                    .sort((a, b) => a - b);
+
+  const cfgChanged = SLOTS.some(n => JSON.stringify(cards[n - 1]) !== original[n]);
+
+  if (!cfgChanged && !upload.length) {
+    alert('沒有任何改動');
+    return;
+  }
 
   $('#go').disabled = true;
-  $('#go').textContent = '上傳中…';
+  $('#go').textContent = '儲存中…';
   $('#progress').style.display = 'block';
   $('#log').innerHTML = '';
   setBar(0);
 
-  // 上傳過程中不小心關掉分頁會很痛，先攔一下
   const guard = e => { e.preventDefault(); e.returnValue = ''; };
   window.addEventListener('beforeunload', guard);
 
   try {
-    /* ── 1. 驗金鑰 ─────────────────────────────────── */
+    /* ── 驗金鑰 ─────────────────────────────────── */
     say('檢查金鑰…', 'dim');
     const check = await gh('');
 
-    if (check.status === 401) { say('金鑰無效或已過期，請重新拿一組', 'err'); return; }
+    if (check.status === 401) { say('金鑰無效或已過期', 'err'); return; }
     if (check.status === 403) { say('金鑰權限不足，建立時要勾 repo', 'err'); return; }
     if (check.status === 404) { say('找不到倉庫，或這組金鑰沒有權限', 'err'); return; }
     if (!check.ok)            { say(`連線失敗（${check.status}）`, 'err'); return; }
@@ -404,134 +644,144 @@ $('#go').onclick = async () => {
     }
     say('金鑰沒問題', 'ok');
 
-    /* ── 2. 讀目前 raw/ 有哪些檔（等下要清掉舊的）───── */
-    const oldFiles = [];
-    const rawRes = await gh(`/contents/raw?ref=${BRANCH}`);
-    if (rawRes.ok) {
-      const arr = await rawRes.json();
-      if (Array.isArray(arr)) oldFiles.push(...arr.map(f => f.name));
-    }
-
-    /* ── 3. 一部一部轉成 blob 送上去 ────────────────── */
-    // 總位元組數，拿來算整體進度
-    const totalBytes = list.reduce((s, n) => s + files[n].size, 0);
-    let doneBytes = 0;
-
     const treeItems = [];
-    const okList = [];
 
-    for (const n of list) {
-      const f   = files[n];
-      const ext = (f.name.match(/\.[^.]+$/) || ['.mp4'])[0].toLowerCase();
-      const mb  = f.size / 1048576;
+    /* ── 設定檔 ─────────────────────────────────── */
+    if (cfgChanged) {
+      say('\n打包卡片設定…', 'dim');
+      const json = JSON.stringify({
+        '_說明': '8 張卡各自要做什麼。可以直接改這裡，也可以用設定面板改（upload.html）。',
+        cards,
+      }, null, 2) + '\n';
 
-      say(`\n第 ${n} 部　${f.name}（${mb.toFixed(1)}MB）`);
-
-      // 大檔切塊：GitHub 單次請求約 20MB 上限，切 10MB 保險
-      const PART  = 10 * 1048576;
-      const parts = Math.ceil(f.size / PART);
-
-      if (parts > 1) say(`  太大，切成 ${parts} 塊送`, 'warn');
-
-      const shas = [];
-      let failed = false;
-
-      for (let i = 0; i < parts; i++) {
-        const slice = f.slice(i * PART, (i + 1) * PART);
-        const label = parts > 1 ? `第 ${i + 1}/${parts} 塊` : '檔案';
-
-        const b64 = await toBase64(slice, p => {
-          // 整體進度：已完成的位元組 + 這一塊已讀的比例
-          const cur = doneBytes + i * PART + p * slice.size;
-          setBar(Math.round((cur / totalBytes) * 85));
-        });
-
-        say(`  ${label} 上傳中…`, 'dim');
-
-        const r = await gh('/git/blobs', {
-          method: 'POST',
-          body: JSON.stringify({ content: b64, encoding: 'base64' }),
-        });
-
-        if (!r.ok) {
-          say(`  失敗：${await ghError(r)}`, 'err');
-          failed = true;
-          break;
-        }
-        shas.push((await r.json()).sha);
-      }
-
-      doneBytes += f.size;
-
-      if (failed) {
-        say(`  第 ${n} 部沒傳成功，跳過`, 'err');
-        continue;
-      }
-
-      // 掛進檔案結構：單塊直接 raw/1.mp4，多塊 raw/1.mp4.part001…
-      shas.forEach((sha, i) => {
-        treeItems.push({
-          path: parts === 1
-            ? `raw/${n}${ext}`
-            : `raw/${n}${ext}.part${String(i + 1).padStart(3, '0')}`,
-          mode: '100644', type: 'blob', sha,
-        });
+      const blob = await gh('/git/blobs', {
+        method: 'POST',
+        body: JSON.stringify({ content: utf8ToBase64(json), encoding: 'base64' }),
       });
 
-      okList.push(n);
-      say(`  第 ${n} 部好了`, 'ok');
+      if (!blob.ok) { say(`設定檔失敗：${await ghError(blob)}`, 'err'); return; }
+
+      treeItems.push({
+        path: 'assets/cards.json', mode: '100644', type: 'blob',
+        sha: (await blob.json()).sha,
+      });
+      say('設定已打包', 'ok');
     }
 
-    if (!okList.length) {
-      say('\n沒有任何影片上傳成功', 'err');
-      return;
+    /* ── 影片 ───────────────────────────────────── */
+    const okVideos = [];
+
+    if (upload.length) {
+      const totalBytes = upload.reduce((s, n) => s + files[n].size, 0);
+      let doneBytes = 0;
+
+      // 讀 raw/ 現有的檔案，等下把同編號的舊檔清掉
+      const oldFiles = [];
+      const rawRes = await gh(`/contents/raw?ref=${BRANCH}`);
+      if (rawRes.ok) {
+        const arr = await rawRes.json();
+        if (Array.isArray(arr)) oldFiles.push(...arr.map(f => f.name));
+      }
+
+      for (const n of upload) {
+        const f   = files[n];
+        const ext = (f.name.match(/\.[^.]+$/) || ['.mp4'])[0].toLowerCase();
+        const mb  = f.size / 1048576;
+
+        say(`\n第 ${n} 張影片　${f.name}（${mb.toFixed(1)}MB）`);
+
+        // GitHub 單次請求約 20MB 上限，切 10MB 保險
+        const PART  = 10 * 1048576;
+        const parts = Math.ceil(f.size / PART);
+        if (parts > 1) say(`  太大，切成 ${parts} 塊送`, 'warn');
+
+        const shas = [];
+        let failed = false;
+
+        for (let i = 0; i < parts; i++) {
+          const slice = f.slice(i * PART, (i + 1) * PART);
+          const label = parts > 1 ? `第 ${i + 1}/${parts} 塊` : '檔案';
+
+          const b64 = await toBase64(slice, p => {
+            const cur = doneBytes + i * PART + p * slice.size;
+            setBar(Math.round((cur / totalBytes) * 80));
+          });
+
+          say(`  ${label} 上傳中…`, 'dim');
+          const r = await gh('/git/blobs', {
+            method: 'POST',
+            body: JSON.stringify({ content: b64, encoding: 'base64' }),
+          });
+
+          if (!r.ok) { say(`  失敗：${await ghError(r)}`, 'err'); failed = true; break; }
+          shas.push((await r.json()).sha);
+        }
+
+        doneBytes += f.size;
+        if (failed) { say(`  第 ${n} 張沒傳成功，跳過`, 'err'); continue; }
+
+        shas.forEach((sha, i) => {
+          treeItems.push({
+            path: parts === 1
+              ? `raw/${n}${ext}`
+              : `raw/${n}${ext}.part${String(i + 1).padStart(3, '0')}`,
+            mode: '100644', type: 'blob', sha,
+          });
+        });
+
+        okVideos.push(n);
+        say(`  第 ${n} 張好了`, 'ok');
+      }
+
+      // 同編號的舊檔標記刪除，免得 raw/1.mov 和 raw/1.mp4 並存
+      const keep = new Set(treeItems.map(t => t.path.replace(/^raw\//, '')));
+      for (const name of oldFiles) {
+        const m = name.match(/^(\d+)\./);
+        if (!m || !okVideos.includes(Number(m[1])) || keep.has(name)) continue;
+        treeItems.push({ path: `raw/${name}`, mode: '100644', type: 'blob', sha: null });
+      }
     }
 
-    /* ── 4. 把這幾個編號的舊檔標記成刪除 ─────────────
-     * 不刪的話，raw/1.mov 和 raw/1.mp4 會同時存在，
-     * 轉檔機器人不知道該用哪個。sha:null = 刪掉。
-     * ─────────────────────────────────────────────── */
-    const keep = new Set(treeItems.map(t => t.path.replace(/^raw\//, '')));
+    if (!treeItems.length) { say('\n沒有東西要存', 'warn'); return; }
 
-    for (const name of oldFiles) {
-      const m = name.match(/^(\d+)\./);
-      if (!m) continue;                          // 說明文件之類的留著
-      if (!okList.includes(Number(m[1]))) continue;   // 不是這次換的，不動
-      if (keep.has(name)) continue;              // 同名會被覆蓋，不用刪
+    /* ── 一次 commit ────────────────────────────── */
+    say('\n寫回 GitHub…', 'dim');
+    setBar(88);
 
-      treeItems.push({ path: `raw/${name}`, mode: '100644', type: 'blob', sha: null });
-    }
+    const parts = [];
+    if (cfgChanged)      parts.push('卡片設定');
+    if (okVideos.length) parts.push(`第 ${okVideos.join('、')} 張影片`);
 
-    /* ── 5. 一次 commit ─────────────────────────────── */
-    say('\n整理檔案結構…', 'dim');
-    setBar(90);
-
-    const ok = await commitAll(
-      treeItems,
-      `上傳影片：第 ${okList.join('、')} 部`
-    );
-
-    if (!ok) return;
+    if (!await commitAll(treeItems, '更新' + parts.join('、'))) return;
 
     setBar(100);
-    okList.forEach(n => {
-      const el = $('#slot' + n);
-      el.className = 'slot done';
-      el.querySelector('.name').textContent = '已上傳，轉檔中';
+
+    // 更新基準，這樣「已修改」標記會歸零
+    SLOTS.forEach(n => {
+      original[n] = JSON.stringify(cards[n - 1]);
+      delete files[n];
+      const row = $('#row' + n);
+      row.classList.remove('edited');
+      if (okVideos.includes(n) || cfgChanged) row.classList.add('done');
     });
+    updateSummary();
 
     say('\n────────────────────────');
-    say(`上傳完成，共 ${okList.length} 部`, 'ok');
-    say('雲端正在自動轉檔，約 3~5 分鐘');
+    say('儲存完成', 'ok');
 
-    watchConvert();
+    if (okVideos.length) {
+      say('影片正在自動轉檔，約 3~5 分鐘');
+      watchConvert();
+    } else {
+      say('約 1~2 分鐘後所有平板都會吃到新設定', 'ok');
+    }
 
   } catch (err) {
     say(`\n出錯了：${err.message}`, 'err');
   } finally {
     window.removeEventListener('beforeunload', guard);
     $('#go').disabled = false;
-    $('#go').textContent = '開始上傳';
+    $('#go').textContent = '儲存設定';
   }
 };
 
@@ -540,7 +790,6 @@ $('#go').onclick = async () => {
  * ══════════════════════════════════════════════════════ */
 
 async function commitAll(treeItems, message) {
-  // 目前分支停在哪
   const refRes = await gh(`/git/ref/heads/${BRANCH}`);
   if (!refRes.ok) { say(`讀取分支失敗：${await ghError(refRes)}`, 'err'); return false; }
   const baseSha = (await refRes.json()).object.sha;
@@ -549,7 +798,6 @@ async function commitAll(treeItems, message) {
   if (!commitRes.ok) { say(`讀取紀錄失敗：${await ghError(commitRes)}`, 'err'); return false; }
   const baseTree = (await commitRes.json()).tree.sha;
 
-  // 新的檔案結構
   const treeRes = await gh('/git/trees', {
     method: 'POST',
     body: JSON.stringify({ base_tree: baseTree, tree: treeItems }),
@@ -557,7 +805,6 @@ async function commitAll(treeItems, message) {
   if (!treeRes.ok) { say(`建立結構失敗：${await ghError(treeRes)}`, 'err'); return false; }
   const newTree = (await treeRes.json()).sha;
 
-  // 新的紀錄
   const newCommitRes = await gh('/git/commits', {
     method: 'POST',
     body: JSON.stringify({ message, tree: newTree, parents: [baseSha] }),
@@ -565,7 +812,6 @@ async function commitAll(treeItems, message) {
   if (!newCommitRes.ok) { say(`建立紀錄失敗：${await ghError(newCommitRes)}`, 'err'); return false; }
   const newCommit = (await newCommitRes.json()).sha;
 
-  // 分支移過去
   const upd = await gh(`/git/refs/heads/${BRANCH}`, {
     method: 'PATCH',
     body: JSON.stringify({ sha: newCommit }),
@@ -576,30 +822,28 @@ async function commitAll(treeItems, message) {
 }
 
 /* ══════════════════════════════════════════════════════
- *  自動追蹤轉檔進度，不用自己去 Actions 頁面盯
+ *  追蹤轉檔進度
  * ══════════════════════════════════════════════════════ */
 
 async function watchConvert() {
   say('\n追蹤轉檔進度中…', 'dim');
+  let noRun = 0;
 
-  let noRunCount = 0;
-
-  for (let i = 0; i < 60; i++) {                 // 最多盯 5 分鐘
+  for (let i = 0; i < 60; i++) {
     await new Promise(r => setTimeout(r, 5000));
 
     const r = await gh('/actions/runs?per_page=1');
     if (!r.ok) { say('（讀不到進度，請自己看 Actions 頁面）', 'warn'); return; }
 
     const run = (await r.json()).workflow_runs?.[0];
-
     if (!run) {
-      if (++noRunCount > 6) { say('（還沒看到轉檔工作，請自己看 Actions 頁面）', 'warn'); return; }
+      if (++noRun > 6) { say('（還沒看到轉檔工作，請自己看 Actions 頁面）', 'warn'); return; }
       continue;
     }
 
     if (run.status === 'completed') {
       if (run.conclusion === 'success') {
-        say('轉檔完成，影片已經上線', 'ok');
+        say('轉檔完成，內容已經上線', 'ok');
         say('可以去測試頁確認', 'ok');
       } else {
         say(`轉檔失敗（${run.conclusion}），按「看轉檔進度」查原因`, 'err');
