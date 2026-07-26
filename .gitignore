@@ -1,0 +1,12 @@
+# Windows
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+
+# Arduino 編譯產生的暫存檔
+build/
+*.bin
+*.elf

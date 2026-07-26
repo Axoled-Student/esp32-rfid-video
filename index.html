@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>影片测试页</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#0d0d0f; color:#eee; min-height:100vh; padding:24px;
+    font-family:system-ui,"Microsoft JhengHei","PingFang TC",sans-serif;
+  }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.5rem; margin-bottom:6px; }
+  .sub { color:#888; font-size:.9rem; margin-bottom:20px; line-height:1.6; }
+  video {
+    width:100%; aspect-ratio:16/9; background:#000;
+    border-radius:10px; margin-bottom:18px;
+  }
+  .btns { display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:10px; }
+  button {
+    padding:14px 8px; font-size:1rem; cursor:pointer; color:#eee;
+    background:#1c1c21; border:1px solid #333; border-radius:8px;
+    transition:.15s;
+  }
+  button:hover  { background:#2a2a32; border-color:#555; }
+  button.active { background:#2563eb; border-color:#2563eb; }
+  #msg { margin-top:16px; color:#f87171; font-size:.9rem; min-height:1.2em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>影片测试页</h1>
+  <p class="sub">
+    这一页是用来<strong>确认 8 部影片有没有正常上传</strong>的。<br>
+    点按钮能播 = 影片没问题，接下来 ESP32 那边就能正常抓到。
+  </p>
+
+  <video id="player" controls playsinline></video>
+
+  <div class="btns" id="btns"></div>
+  <div id="msg"></div>
+</div>
+
+<script>
+const player = document.getElementById('player');
+const btns   = document.getElementById('btns');
+const msg    = document.getElementById('msg');
+
+// 生成 8 个按钮
+for (let i = 1; i <= 8; i++) {
+  const b = document.createElement('button');
+  b.textContent = '影片 ' + i;
+  b.onclick = () => {
+    document.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    msg.textContent = '';
+    player.src = 'videos/' + i + '.mp4';
+    player.play().catch(() => {});
+  };
+  btns.appendChild(b);
+}
+
+player.addEventListener('error', () => {
+  msg.textContent = '⚠ 这部影片载入失败 —— 检查 videos/ 资料夹里有没有对应的 mp4，档名要正好是 1.mp4 ~ 8.mp4';
+});
+</script>
+</body>
+</html>
