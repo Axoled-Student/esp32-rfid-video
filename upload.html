@@ -175,6 +175,9 @@ function pick(n) {
       alert(`這個檔案有 ${mb.toFixed(0)}MB，超過 GitHub 的 100MB 上限。\n請把影片剪短一點再試。`);
       return;
     }
+    if (mb > 25) {
+      say2(`第 ${n} 部有 ${mb.toFixed(0)}MB，上傳時會自動分段處理`);
+    }
 
     files[n] = f;
     const el = document.getElementById('slot' + n);
@@ -195,13 +198,43 @@ function say(msg, cls = '') {
 }
 const setBar = pct => $('#barFill').style.width = pct + '%';
 
+// 選檔階段的提示（那時 log 區還沒展開）
+function say2(msg) {
+  $('#progress').style.display = 'block';
+  say(msg, 'warn');
+}
+
 // ---------- 檔案轉 base64（GitHub API 要這格式）----------
-function toBase64(file) {
+// 大檔案不能一次讀，會爆記憶體，所以切成小塊慢慢轉
+function toBase64(file, onProgress) {
   return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload  = () => resolve(r.result.split(',')[1]);
-    r.onerror = reject;
-    r.readAsDataURL(file);
+    const CHUNK = 1048576;            // 一次讀 1MB
+    const reader = new FileReader();
+    let offset = 0;
+    let binary = '';
+
+    reader.onload = () => {
+      const bytes = new Uint8Array(reader.result);
+      // 一次轉 8KB，避免參數太多爆掉
+      for (let i = 0; i < bytes.length; i += 8192) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      }
+      offset += CHUNK;
+
+      if (onProgress) onProgress(Math.min(offset / file.size, 1));
+
+      if (offset < file.size) {
+        readNext();
+      } else {
+        resolve(btoa(binary));
+      }
+    };
+    reader.onerror = reject;
+
+    function readNext() {
+      reader.readAsArrayBuffer(file.slice(offset, offset + CHUNK));
+    }
+    readNext();
   });
 }
 
@@ -217,6 +250,80 @@ async function gh(path, opts = {}) {
     },
   });
   return res;
+}
+
+// ---------- 大檔案上傳 ----------
+// 一般的上傳方式超過 25MB 就會被擋，
+// 這裡改走 Git 的底層做法，先把檔案存成 blob，再掛到分支上。
+async function uploadBig(path, content, n) {
+  try {
+    // 1. 把檔案本體存進去
+    say('  存放檔案中...（大檔案需要一點時間）');
+    const blobRes = await gh('/git/blobs', {
+      method: 'POST',
+      body: JSON.stringify({ content, encoding: 'base64' }),
+    });
+    if (!blobRes.ok) {
+      const e = await blobRes.json().catch(() => ({}));
+      say(`  失敗：${e.message || blobRes.status}`, 'err');
+      return false;
+    }
+    const blobSha = (await blobRes.json()).sha;
+
+    // 2. 找出目前分支的位置
+    const refRes = await gh(`/git/ref/heads/${BRANCH}`);
+    if (!refRes.ok) { say('  讀取分支失敗', 'err'); return false; }
+    const baseSha = (await refRes.json()).object.sha;
+
+    const commitRes = await gh(`/git/commits/${baseSha}`);
+    if (!commitRes.ok) { say('  讀取紀錄失敗', 'err'); return false; }
+    const treeSha = (await commitRes.json()).tree.sha;
+
+    // 3. 建立新的檔案結構
+    say('  整理檔案結構...');
+    const newTree = await gh('/git/trees', {
+      method: 'POST',
+      body: JSON.stringify({
+        base_tree: treeSha,
+        tree: [{ path, mode: '100644', type: 'blob', sha: blobSha }],
+      }),
+    });
+    if (!newTree.ok) {
+      const e = await newTree.json().catch(() => ({}));
+      say(`  失敗：${e.message || newTree.status}`, 'err');
+      return false;
+    }
+    const newTreeSha = (await newTree.json()).sha;
+
+    // 4. 建立一筆紀錄
+    const newCommit = await gh('/git/commits', {
+      method: 'POST',
+      body: JSON.stringify({
+        message: `更新第 ${n} 部影片`,
+        tree: newTreeSha,
+        parents: [baseSha],
+      }),
+    });
+    if (!newCommit.ok) { say('  建立紀錄失敗', 'err'); return false; }
+    const newCommitSha = (await newCommit.json()).sha;
+
+    // 5. 把分支移到新紀錄上
+    const upd = await gh(`/git/refs/heads/${BRANCH}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ sha: newCommitSha }),
+    });
+    if (!upd.ok) {
+      const e = await upd.json().catch(() => ({}));
+      say(`  失敗：${e.message || upd.status}`, 'err');
+      return false;
+    }
+
+    return true;
+
+  } catch (err) {
+    say(`  出錯：${err.message}`, 'err');
+    return false;
+  }
 }
 
 // ---------- 上傳主流程 ----------
@@ -249,9 +356,12 @@ $('#go').onclick = async () => {
       const ext  = (f.name.match(/\.[^.]+$/) || ['.mp4'])[0].toLowerCase();
       const path = `raw/${n}${ext}`;
 
-      say(`\n第 ${n} 部：${f.name}`);
+      const mb = f.size / 1048576;
+      say(`\n第 ${n} 部：${f.name} (${mb.toFixed(1)}MB)`);
       say('  轉換中...');
-      const content = await toBase64(f);
+      const content = await toBase64(f, p => {
+        if (p < 1) setBar(Math.round((done / list.length) * 90 + p * (90 / list.length) * 0.4));
+      });
 
       // 同編號的舊檔如果副檔名不同，先刪掉，避免兩個檔案打架
       for (const old of ['.mp4','.mov','.avi','.mkv','.webm','.m4v','.wmv','.flv','.mpg','.mpeg']) {
@@ -274,21 +384,30 @@ $('#go').onclick = async () => {
       if (exist.ok) sha = (await exist.json()).sha;
 
       say('  上傳中...');
-      const put = await gh(`/contents/${path}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          message: `更新第 ${n} 部影片`,
-          content, branch: BRANCH,
-          ...(sha ? { sha } : {}),
-        }),
-      });
 
-      if (!put.ok) {
-        const e = await put.json().catch(() => ({}));
-        say(`  失敗：${e.message || put.status}`, 'err');
-        if (put.status === 403) say('  （可能是檔案太大，GitHub 單檔上限 100MB）', 'warn');
-        continue;
+      let okUpload = false;
+
+      if (mb <= 20) {
+        // 小檔案：一次搞定
+        const put = await gh(`/contents/${path}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            message: `更新第 ${n} 部影片`,
+            content, branch: BRANCH,
+            ...(sha ? { sha } : {}),
+          }),
+        });
+        if (put.ok) okUpload = true;
+        else {
+          const e = await put.json().catch(() => ({}));
+          say(`  失敗：${e.message || put.status}`, 'err');
+        }
+      } else {
+        // 大檔案：走 Git 底層，分段送，可以到 100MB
+        okUpload = await uploadBig(path, content, n);
       }
+
+      if (!okUpload) continue;
 
       done++;
       say(`  第 ${n} 部好了`, 'ok');

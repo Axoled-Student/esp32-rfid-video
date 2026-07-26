@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>模擬刷卡（測試用）</title>
+<script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#0d0d0f; color:#eee; min-height:100vh; padding:24px 16px;
+    font-family:system-ui,"Microsoft JhengHei","PingFang TC",sans-serif;
+  }
+  .wrap { max-width:640px; margin:0 auto; }
+  h1 { font-size:1.5rem; margin-bottom:6px; }
+  .sub { color:#888; font-size:.92rem; margin-bottom:20px; line-height:1.6; }
+
+  .row { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  input {
+    flex:1; min-width:200px; padding:11px 14px; font-size:.95rem;
+    background:#16161a; border:1px solid #333; border-radius:8px; color:#eee;
+    font-family:ui-monospace,monospace;
+  }
+  input:focus { outline:none; border-color:#2563eb; }
+
+  #status {
+    padding:11px 15px; border-radius:8px; font-size:.9rem; margin-bottom:18px;
+    background:#16161a; border:1px solid #2a2a32; color:#999;
+  }
+  #status.ok  { background:#0f1f14; border-color:#1a5c32; color:#86efac; }
+  #status.bad { background:#2a1215; border-color:#7f1d1d; color:#fca5a5; }
+
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
+  .grid button {
+    aspect-ratio:1; font-size:1.6rem; font-weight:700; cursor:pointer;
+    background:#1c1c21; color:#eee; border:1px solid #333; border-radius:10px;
+    transition:.12s;
+  }
+  .grid button:hover:not(:disabled) { background:#2563eb; border-color:#2563eb; transform:translateY(-2px); }
+  .grid button:active:not(:disabled) { transform:translateY(0); }
+  .grid button:disabled { opacity:.35; cursor:not-allowed; }
+
+  #log {
+    background:#0a0a0c; border:1px solid #26262e; border-radius:8px;
+    padding:12px; font-size:.85rem; font-family:ui-monospace,monospace;
+    max-height:180px; overflow-y:auto; color:#888; white-space:pre-wrap;
+  }
+  #log .ok { color:#4ade80; }
+  .note {
+    margin-top:18px; padding:12px 14px; background:#16161a;
+    border:1px solid #2a2a32; border-radius:8px; font-size:.85rem;
+    color:#888; line-height:1.7;
+  }
+  .note a { color:#60a5fa; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>模擬刷卡</h1>
+  <p class="sub">
+    ESP32 還沒接好時，可以用這頁假裝刷卡，測試播放頁有沒有正常運作 🧪
+  </p>
+
+  <div class="row">
+    <input id="room" placeholder="房間代號" value="vin836-rfid-8x2f">
+    <button id="conn" style="padding:11px 22px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">連線</button>
+  </div>
+
+  <div id="status">尚未連線</div>
+
+  <div class="grid" id="grid"></div>
+
+  <div id="log">等待連線...</div>
+
+  <div class="note">
+    <strong>怎麼測：</strong><br>
+    1. 開一個分頁到 <a href="play.html" target="_blank">播放頁</a>，點一下畫面解鎖<br>
+    2. 回到這頁按「連線」<br>
+    3. 按數字按鈕，播放頁那邊應該就會播對應的影片
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let client = null, seq = 0;
+
+const grid = $('#grid');
+for (let i = 1; i <= 8; i++) {
+  const b = document.createElement('button');
+  b.textContent = i;
+  b.disabled = true;
+  b.onclick = () => send(i);
+  grid.appendChild(b);
+}
+
+function log(msg, cls = '') {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = msg;
+  $('#log').appendChild(d);
+  $('#log').scrollTop = $('#log').scrollHeight;
+}
+
+function setStatus(text, cls = '') {
+  $('#status').textContent = text;
+  $('#status').className = cls;
+}
+
+$('#conn').onclick = () => {
+  const room = $('#room').value.trim();
+  if (!room) { alert('請填房間代號'); return; }
+
+  if (client) { client.end(true); client = null; }
+
+  const topic = 'esp32rfid/' + room;
+  setStatus('連線中...');
+  $('#log').innerHTML = '';
+  log('連接 broker.hivemq.com');
+
+  client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
+    clientId: 'sim-' + Math.random().toString(16).slice(2, 10),
+    reconnectPeriod: 3000,
+  });
+
+  client.on('connect', () => {
+    setStatus('已連線 → ' + topic, 'ok');
+    log('連線成功', 'ok');
+    document.querySelectorAll('.grid button').forEach(b => b.disabled = false);
+
+    client.publish(topic, JSON.stringify({ type: 'online' }), { retain: true });
+    log('已送出上線通知');
+  });
+
+  client.on('error', e => {
+    setStatus('連線失敗', 'bad');
+    log('錯誤：' + e.message);
+  });
+  client.on('offline', () => setStatus('離線', 'bad'));
+};
+
+function send(n) {
+  if (!client || !client.connected) { alert('還沒連線'); return; }
+  seq++;
+  const topic = 'esp32rfid/' + $('#room').value.trim();
+  const msg = JSON.stringify({ type: 'play', video: n, seq });
+  client.publish(topic, msg, { retain: true });
+  log(`送出：播放第 ${n} 部 (seq=${seq})`, 'ok');
+}
+</script>
+</body>
+</html>
