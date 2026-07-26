@@ -11,9 +11,11 @@ build/
 *.bin
 *.elf
 
-# 測試工具，不需要上傳
+# 套件，不需要上傳
 node_modules/
-package.json
 package-lock.json
+
+# 測試產生的截圖和暫存檔
 test-results/
-tests/
+tests/tmp/
+tests/*.png

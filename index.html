@@ -1,84 +1,206 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-TW">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>影片测试页</title>
+<title>影片測試頁</title>
+<link rel="stylesheet" href="assets/style.css">
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body {
-    background:#0d0d0f; color:#eee; min-height:100vh; padding:24px;
-    font-family:system-ui,"Microsoft JhengHei","PingFang TC",sans-serif;
+  /* 播放器 */
+  .stage {
+    background:#000; border-radius:var(--r-lg); overflow:hidden;
+    border:1px solid var(--line-soft); margin-bottom:18px;
+    position:relative;
   }
-  .wrap { max-width:900px; margin:0 auto; }
-  h1 { font-size:1.5rem; margin-bottom:6px; }
-  .sub { color:#888; font-size:.9rem; margin-bottom:20px; line-height:1.6; }
-  video {
-    width:100%; aspect-ratio:16/9; background:#000;
-    border-radius:10px; margin-bottom:18px;
+  .stage video { width:100%; aspect-ratio:16/9; display:block; background:#000; }
+
+  /* 還沒選影片時蓋在上面的提示 */
+  .stage .placeholder {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:10px; color:var(--text-mute); font-size:.92rem;
+    background:#000; pointer-events:none; transition:opacity .3s;
   }
-  .btns { display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:10px; }
-  button {
-    padding:14px 8px; font-size:1rem; cursor:pointer; color:#eee;
-    background:#1c1c21; border:1px solid #333; border-radius:8px;
-    transition:.15s;
+  .stage .placeholder .big { font-size:2rem; opacity:.5; }
+  .stage.playing .placeholder { opacity:0; }
+
+  /* 影片格子 */
+  .slot {
+    background:var(--surface); border:1px solid var(--line-soft);
+    border-radius:var(--r); padding:14px 12px; cursor:pointer;
+    text-align:center; transition:.15s; position:relative;
   }
-  button:hover  { background:#2a2a32; border-color:#555; }
-  button.active { background:#2563eb; border-color:#2563eb; }
-  #msg { margin-top:16px; color:#f87171; font-size:.9rem; min-height:1.2em; }
-  .links { display:flex; gap:10px; flex-wrap:wrap; margin-top:22px; }
-  .uplink {
-    display:inline-block; padding:12px 20px;
-    background:#1c1c21; border:1px solid #333; border-radius:8px;
-    color:#60a5fa; text-decoration:none; font-size:.92rem; transition:.15s;
+  .slot:hover { border-color:var(--line); background:var(--surface-2); }
+
+  .slot .num {
+    font-size:1.7rem; font-weight:700; line-height:1.2;
+    color:var(--text-mute); transition:color .15s;
   }
-  .uplink:hover { background:#2a2a32; border-color:#555; }
-  .uplink.main {
-    background:#2563eb; border-color:#2563eb; color:#fff; font-weight:600;
+  .slot .state { font-size:.78rem; color:var(--text-mute); margin-top:2px; }
+
+  /* 有影片 */
+  .slot.ready { border-color:#1c5c3a; background:#0d1a13; }
+  .slot.ready .num   { color:var(--ok); }
+  .slot.ready .state { color:#86efac; }
+
+  /* 沒影片 */
+  .slot.missing { border-color:#4a2020; background:#1a0f10; }
+  .slot.missing .num   { color:#a85555; }
+  .slot.missing .state { color:#e59a9a; }
+
+  /* 正在檢查 */
+  .slot.checking .state { color:var(--warn); }
+
+  /* 目前播放中 */
+  .slot.active {
+    border-color:var(--accent);
+    box-shadow:0 0 0 1px var(--accent), 0 4px 16px rgba(59,130,246,.18);
   }
-  .uplink.main:hover { background:#1d4ed8; }
+  .slot.active .num { color:var(--accent); }
+
+  .summary {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    margin-bottom:14px; font-size:.9rem; color:var(--text-dim);
+  }
+  .pill {
+    padding:4px 11px; border-radius:99px; font-size:.8rem; font-weight:600;
+    background:var(--surface-2); border:1px solid var(--line-soft);
+  }
+  .pill.ok  { background:#0d1f16; border-color:#1c5c3a; color:#86efac; }
+  .pill.bad { background:#241315; border-color:#7f2222; color:#fca5a5; }
 </style>
 </head>
 <body>
+<div class="page">
 <div class="wrap">
-  <h1>影片测试页</h1>
-  <p class="sub">
-    这一页是用来<strong>确认 8 部影片有没有正常上传</strong>的。<br>
-    点按钮能播 = 影片没问题，接下来 ESP32 那边就能正常抓到。
-  </p>
 
-  <video id="player" controls playsinline></video>
-
-  <div class="btns" id="btns"></div>
-  <div id="msg"></div>
-
-  <div class="links">
-    <a href="play.html" class="uplink main">▶ 開啟刷卡播放頁</a>
-    <a href="upload.html" class="uplink">→ 上傳／換影片</a>
+  <div class="head">
+    <h1>影片測試頁</h1>
+    <p>確認 8 部影片都上傳好了，能播 = ESP32 那邊也抓得到。</p>
   </div>
+
+  <div class="card">
+    <div class="stage" id="stage">
+      <video id="player" controls playsinline preload="metadata"></video>
+      <div class="placeholder">
+        <div class="big">▶</div>
+        <div>點下面的格子播放</div>
+      </div>
+    </div>
+
+    <div class="summary" id="summary">
+      <span class="pill" id="pill">檢查中…</span>
+      <span id="summaryText">正在確認每一部影片的狀態</span>
+    </div>
+
+    <div class="grid" id="slots"></div>
+  </div>
+
+  <div class="nav">
+    <a href="play.html">▶ 刷卡播放頁</a>
+    <a href="upload.html">↑ 上傳／換影片</a>
+    <a href="模擬刷卡.html">⊹ 模擬刷卡</a>
+  </div>
+
+</div>
 </div>
 
+<script src="assets/config.js"></script>
 <script>
-const player = document.getElementById('player');
-const btns   = document.getElementById('btns');
-const msg    = document.getElementById('msg');
+const player = $('#player');
+const stage  = $('#stage');
+const slots  = $('#slots');
 
-// 生成 8 个按钮
-for (let i = 1; i <= 8; i++) {
-  const b = document.createElement('button');
-  b.textContent = '影片 ' + i;
-  b.onclick = () => {
-    document.querySelectorAll('button').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-    msg.textContent = '';
-    player.src = 'videos/' + i + '.mp4';
-    player.play().catch(() => {});
-  };
-  btns.appendChild(b);
+let current = null;
+
+/* ── 建立 8 個格子 ─────────────────────────────────────── */
+
+SLOTS.forEach(n => {
+  const d = document.createElement('div');
+  d.className = 'slot checking';
+  d.id = 'slot' + n;
+  d.innerHTML = `<div class="num">${n}</div><div class="state">檢查中</div>`;
+  d.onclick = () => playSlot(n);
+  slots.appendChild(d);
+});
+
+function playSlot(n) {
+  $$('.slot').forEach(s => s.classList.remove('active'));
+  $('#slot' + n).classList.add('active');
+  stage.classList.add('playing');
+  current = n;
+
+  player.src = `videos/${n}.mp4`;
+  player.play().catch(() => {});
 }
 
+/* ── 檢查每一部影片在不在 ──────────────────────────────
+ * 用 HEAD 只問「檔案在不在、多大」，不會真的下載影片，
+ * 所以 8 部一起查也很快、不吃流量。
+ * ──────────────────────────────────────────────────── */
+
+let okCount = 0, badCount = 0;
+
+async function checkAll() {
+  await Promise.all(SLOTS.map(async n => {
+    const el = $('#slot' + n);
+    try {
+      const r = await fetch(`videos/${n}.mp4`, { method: 'HEAD', cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status);
+
+      const bytes = Number(r.headers.get('content-length') || 0);
+
+      // 檔案在，但小得不像影片 = 大概是佔位用的空檔
+      if (bytes > 0 && bytes < 20000) {
+        el.className = 'slot missing';
+        el.querySelector('.state').textContent = '疑似空檔';
+        badCount++;
+        return;
+      }
+
+      el.className = 'slot ready';
+      el.querySelector('.state').textContent = bytes ? fmtSize(bytes) : '可播放';
+      okCount++;
+
+    } catch {
+      el.className = 'slot missing';
+      el.querySelector('.state').textContent = '沒有影片';
+      badCount++;
+    }
+  }));
+
+  showSummary();
+}
+
+function fmtSize(bytes) {
+  const mb = bytes / 1048576;
+  return mb >= 1 ? mb.toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
+}
+
+function showSummary() {
+  const pill = $('#pill');
+  const text = $('#summaryText');
+
+  if (badCount === 0) {
+    pill.className = 'pill ok';
+    pill.textContent = `${okCount} / ${CONFIG.COUNT} 就緒`;
+    text.textContent = '全部正常，ESP32 那邊可以直接用了。';
+  } else {
+    pill.className = 'pill bad';
+    pill.textContent = `${okCount} / ${CONFIG.COUNT} 就緒`;
+    text.innerHTML = `有 ${badCount} 部還沒好，<a href="upload.html" style="color:var(--accent)">去上傳面板補上</a>。`;
+  }
+}
+
+checkAll();
+
+/* ── 播放失敗時，把那一格標成紅的 ──────────────────────── */
+
 player.addEventListener('error', () => {
-  msg.textContent = '⚠ 这部影片载入失败 —— 检查 videos/ 资料夹里有没有对应的 mp4，档名要正好是 1.mp4 ~ 8.mp4';
+  if (!player.getAttribute('src') || current === null) return;
+  const el = $('#slot' + current);
+  el.className = 'slot missing active';
+  el.querySelector('.state').textContent = '播放失敗';
 });
 </script>
 </body>

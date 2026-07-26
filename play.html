@@ -2,234 +2,326 @@
 <html lang="zh-TW">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
 <title>刷卡播放</title>
 <script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html, body { height:100%; overflow:hidden; }
+
+  html, body {
+    height:100%; overflow:hidden; background:#000;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+
   body {
-    background:#000; color:#eee;
-    font-family:system-ui,"Microsoft JhengHei","PingFang TC",sans-serif;
+    color:#ececf0;
+    font-family:system-ui,-apple-system,"Microsoft JhengHei","PingFang TC",sans-serif;
   }
 
-  video { width:100%; height:100%; object-fit:contain; background:#000; display:block; }
+  video {
+    position:fixed; inset:0;
+    width:100%; height:100%;
+    object-fit:contain; background:#000;
+    display:block;
+  }
 
-  /* ── 設定房間代號 ── */
-  #setup {
-    position:fixed; inset:0; z-index:100; background:#0d0d0f;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:18px; padding:24px; text-align:center;
+  /* 全螢幕蓋板的共同底色 */
+  .screen {
+    position:fixed; inset:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    text-align:center; padding:32px;
+    background:#000;
   }
-  #setup h1 { font-size:1.5rem; }
-  #setup p { color:#888; font-size:.92rem; max-width:400px; line-height:1.6; }
-  #setup input {
-    width:100%; max-width:340px; padding:13px 15px; font-size:1rem;
-    background:#16161a; border:1px solid #333; border-radius:9px; color:#eee;
-    text-align:center; font-family:ui-monospace,monospace;
+
+  /* ── 點一下解鎖（iPad Safari 需要手勢才准出聲）── */
+  #unlock {
+    z-index:60; cursor:pointer; gap:18px;
+    background:radial-gradient(circle at 50% 45%, #14141c 0%, #000 70%);
   }
-  #setup input:focus { outline:none; border-color:#2563eb; }
-  #setup button {
-    padding:13px 40px; font-size:1rem; font-weight:600; cursor:pointer;
-    background:#2563eb; color:#fff; border:none; border-radius:9px;
+  #unlock .icon {
+    width:76px; height:76px; border-radius:50%;
+    border:2px solid #3b82f6;
+    display:grid; place-items:center;
+    font-size:1.8rem; color:#3b82f6;
+    animation:breathe 2.4s ease-in-out infinite;
   }
-  #setup button:hover { background:#1d4ed8; }
+  #unlock h2 { font-size:1.55rem; font-weight:600; letter-spacing:.02em; }
+  #unlock p  { color:#6b6b78; font-size:.95rem; max-width:300px; }
+
+  @keyframes breathe {
+    0%,100% { transform:scale(1);    box-shadow:0 0 0 0 rgba(59,130,246,.35); }
+    50%     { transform:scale(1.06); box-shadow:0 0 0 18px rgba(59,130,246,0); }
+  }
 
   /* ── 待機畫面 ── */
-  #idle {
-    position:fixed; inset:0; z-index:10; background:#0d0d0f;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:22px; text-align:center; padding:24px;
-  }
-  #idle h1 { font-size:2.4rem; font-weight:600; letter-spacing:2px; }
-  #idle p  { color:#777; font-size:1rem; }
-  .dot { width:15px; height:15px; border-radius:50%; background:#4ade80; animation:blink 1.5s infinite; }
-  .dot.off { background:#666; animation:none; }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.15} }
+  #idle { z-index:30; gap:26px; transition:opacity .45s; }
+  #idle.hide { opacity:0; pointer-events:none; }
 
-  /* ── 連線狀態小燈 ── */
-  #conn {
-    position:fixed; top:14px; right:16px; z-index:50;
-    font-size:.78rem; color:#666; display:flex; align-items:center; gap:7px;
-    background:rgba(0,0,0,.55); padding:7px 12px; border-radius:99px;
-    backdrop-filter:blur(8px); transition:opacity .5s;
+  #idle h1 {
+    font-size:clamp(2.2rem, 7vw, 3.4rem);
+    font-weight:600; letter-spacing:.14em;
   }
-  #conn .led { width:8px; height:8px; border-radius:50%; background:#666; }
-  #conn.ok   .led { background:#4ade80; }
-  #conn.bad  .led { background:#f87171; }
+  #idle .sub { color:#5c5c68; font-size:1rem; letter-spacing:.04em; }
+
+  .wave { display:flex; gap:9px; align-items:center; height:22px; }
+  .wave i {
+    display:block; width:5px; height:100%;
+    border-radius:99px; background:#3b82f6;
+    animation:wave 1.25s ease-in-out infinite;
+  }
+  .wave i:nth-child(2) { animation-delay:.14s; }
+  .wave i:nth-child(3) { animation-delay:.28s; }
+  .wave i:nth-child(4) { animation-delay:.42s; }
+  .wave.off i { background:#3a3a44; animation:none; height:5px; }
+
+  @keyframes wave {
+    0%,100% { transform:scaleY(.32); opacity:.45; }
+    50%     { transform:scaleY(1);   opacity:1; }
+  }
 
   /* ── 影片標題 ── */
   #title {
-    position:fixed; left:0; right:0; bottom:0; z-index:20;
-    padding:60px 24px 20px; font-size:1.15rem;
-    background:linear-gradient(transparent,rgba(0,0,0,.85));
-    opacity:0; transition:opacity .4s; pointer-events:none;
+    position:fixed; left:0; right:0; bottom:0; z-index:40;
+    padding:80px 34px 34px;
+    font-size:1.3rem; font-weight:500; letter-spacing:.02em;
+    background:linear-gradient(transparent, rgba(0,0,0,.9));
+    opacity:0; transition:opacity .5s; pointer-events:none;
+    padding-bottom:calc(34px + env(safe-area-inset-bottom));
   }
   #title.show { opacity:1; }
 
-  /* ── 解鎖自動播放 ── */
-  #unlock {
-    position:fixed; inset:0; z-index:99; background:#0d0d0f;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:14px; cursor:pointer; text-align:center; padding:24px;
+  /* ── 右上角連線狀態 ── */
+  #conn {
+    position:fixed; z-index:50;
+    top:calc(14px + env(safe-area-inset-top)); right:16px;
+    display:flex; align-items:center; gap:8px;
+    padding:7px 14px; border-radius:99px;
+    font-size:.78rem; color:#8b8b96;
+    background:rgba(20,20,24,.7); backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,.06);
+    transition:opacity .6s;
   }
-  #unlock h2 { font-size:1.5rem; }
-  #unlock span { color:#777; font-size:.9rem; }
+  #conn .led {
+    width:7px; height:7px; border-radius:50%; background:#5c5c68;
+  }
+  #conn.ok  .led { background:#34d399; box-shadow:0 0 8px #34d399; }
+  #conn.bad .led { background:#f87171; }
+  #conn.busy .led { background:#fbbf24; animation:blink 1.1s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+  /* ── 左上角全螢幕鈕（移動滑鼠／碰畫面才出現）── */
+  #fs {
+    position:fixed; z-index:50;
+    top:calc(14px + env(safe-area-inset-top)); left:16px;
+    padding:7px 14px; border-radius:99px;
+    font-size:.78rem; color:#8b8b96; cursor:pointer;
+    background:rgba(20,20,24,.7); backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,.06);
+    transition:opacity .6s;
+  }
+  #fs:hover { color:#ececf0; }
+
+  /* 閒置時把角落的東西藏起來，展示畫面才乾淨 */
+  body.calm #conn,
+  body.calm #fs { opacity:0; pointer-events:none; }
+  body.calm    { cursor:none; }
 </style>
 </head>
 <body>
 
-<!-- 第一次要填房間代號 -->
-<div id="setup">
-  <h1>設定房間代號</h1>
-  <p>填跟 ESP32 程式裡一模一樣的代號，兩邊才連得上。</p>
-  <input id="roomInput" placeholder="房間代號" autocomplete="off">
-  <button id="roomGo">連線</button>
-</div>
-
-<!-- 點一下解鎖 -->
-<div id="unlock" style="display:none">
-  <h2>點一下畫面開始</h2>
-  <span>（瀏覽器規定要先互動才能自動播放）</span>
-</div>
+<video id="player" playsinline webkit-playsinline preload="auto"></video>
 
 <!-- 待機 -->
-<div id="idle" style="display:none">
-  <div class="dot" id="idleDot"></div>
+<div class="screen" id="idle">
+  <div class="wave off" id="wave"><i></i><i></i><i></i><i></i></div>
   <h1>請刷卡</h1>
-  <p id="idleMsg">感應後自動播放對應影片</p>
+  <p class="sub" id="idleMsg">感應卡片後自動播放</p>
+</div>
+
+<!-- 點一下解鎖（最上層，點掉之後就不再出現）-->
+<div class="screen" id="unlock">
+  <div class="icon">▶</div>
+  <h2>點一下畫面開始</h2>
+  <p>iPad 需要先碰一下畫面，影片才能出聲音</p>
 </div>
 
 <div id="conn"><span class="led"></span><span id="connText">連線中</span></div>
-
-<video id="player" playsinline></video>
+<div id="fs">⛶ 全螢幕</div>
 <div id="title"></div>
 
+<script src="assets/config.js"></script>
 <script>
-const $ = s => document.querySelector(s);
-
 const player = $('#player');
 const idle   = $('#idle');
 const unlock = $('#unlock');
-const setup  = $('#setup');
 const title  = $('#title');
 const conn   = $('#conn');
 
-let ready   = false;   // 使用者點過畫面了沒
-let lastSeq = -1;      // 記住上一次的刷卡編號，避免重播
-let client  = null;
+let ready   = false;   // 使用者碰過畫面了沒（碰過才准出聲）
+let lastKey = null;    // 上一則訊息的識別碼，用來擋重複
+let playing = false;   // 正在播影片中
 
-// ---------- 房間代號 ----------
-// 網址可以直接帶：play.html?room=xxx
-const urlRoom = new URLSearchParams(location.search).get('room');
-const savedRoom = localStorage.getItem('rfidRoom');
-const room = urlRoom || savedRoom;
+/* ══════════════════════════════════════════════════════
+ *  連線
+ * ══════════════════════════════════════════════════════ */
 
-if (room) {
-  start(room);
-} else {
-  setup.style.display = 'flex';
-}
+const client = connectMqtt('play');
 
-$('#roomGo').onclick = () => {
-  const r = $('#roomInput').value.trim();
-  if (!r) { alert('請填房間代號'); return; }
-  localStorage.setItem('rfidRoom', r);
-  setup.style.display = 'none';
-  start(r);
-};
-$('#roomInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') $('#roomGo').click();
+client.on('connect', () => {
+  client.subscribe(CONFIG.TOPIC, err => {
+    if (err) setConn('bad', '訂閱失敗');
+    else     setConn('ok',  '已連線');
+  });
 });
 
-// ---------- 開始連線 ----------
-function start(room) {
-  setup.style.display  = 'none';
-  unlock.style.display = 'flex';
+client.on('reconnect', () => setConn('busy', '重新連線中'));
+client.on('offline',   () => setConn('bad',  '離線'));
+client.on('error',     () => setConn('bad',  '連線錯誤'));
 
-  const topic = 'esp32rfid/' + room;
+client.on('message', (_t, payload) => {
+  let d;
+  try { d = JSON.parse(payload.toString()); } catch { return; }
 
-  client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
-    clientId: 'web-' + Math.random().toString(16).slice(2, 10),
-    reconnectPeriod: 3000,
-    connectTimeout: 10000,
-  });
+  // 讀卡機上下線通知
+  if (d.type === 'status' || d.type === 'online') {
+    $('#idleMsg').textContent = d.online === false
+      ? '讀卡機未連線'
+      : '感應卡片後自動播放';
+    return;
+  }
 
-  client.on('connect', () => {
-    setConn('ok', '已連線');
-    client.subscribe(topic, err => {
-      if (err) setConn('bad', '訂閱失敗');
-    });
-  });
+  if (d.type !== 'play') return;
 
-  client.on('reconnect', () => setConn('', '重新連線中'));
-  client.on('offline',   () => setConn('bad', '離線'));
-  client.on('error',     () => setConn('bad', '連線錯誤'));
+  // 擋掉重複的訊息。
+  // 用「開機識別碼 + 流水號」當鑰匙：ESP32 重開機後流水號會從頭算，
+  // 只看流水號的話會被誤判成舊訊息，加上開機識別碼就不會了。
+  const key = `${d.boot ?? '-'}#${d.seq ?? '-'}`;
+  if (key === lastKey) return;
+  lastKey = key;
 
-  client.on('message', (t, payload) => {
-    let d;
-    try { d = JSON.parse(payload.toString()); } catch { return; }
+  const n = Number(d.video);
+  if (!Number.isInteger(n) || n < 1 || n > CONFIG.COUNT) return;
 
-    if (d.type === 'online') {
-      $('#idleMsg').textContent = '讀卡機已連線，感應卡片即可播放';
-      return;
-    }
-
-    if (d.type !== 'play') return;
-
-    // seq 沒變 = 是舊訊息（MQTT 會保留最後一則），不要重播
-    if (d.seq === lastSeq) return;
-    lastSeq = d.seq;
-
-    if (ready) play(d.video);
-  });
-}
+  if (ready) play(n);
+});
 
 function setConn(cls, text) {
   conn.className = cls;
   $('#connText').textContent = text;
-  $('#idleDot').className = cls === 'ok' ? 'dot' : 'dot off';
-
-  // 連上之後 3 秒把小燈淡掉，不擋畫面
-  if (cls === 'ok') setTimeout(() => conn.style.opacity = '0', 3000);
-  else conn.style.opacity = '1';
+  $('#wave').className = cls === 'ok' ? 'wave' : 'wave off';
 }
 
-// ---------- 解鎖自動播放 ----------
-unlock.onclick = () => {
-  unlock.style.display = 'none';
-  idle.style.display   = 'flex';
+/* ══════════════════════════════════════════════════════
+ *  解鎖 —— iPad Safari 規定：要有手勢，影片才准出聲
+ * ══════════════════════════════════════════════════════ */
+
+unlock.addEventListener('click', async () => {
+  unlock.remove();
   ready = true;
 
-  // 偷偷播一下空影片，換取瀏覽器的自動播放許可
-  player.play().catch(() => {});
-};
+  // 在「手勢當下」真的播一次影片，瀏覽器才會把這個播放器記成
+  // 「使用者允許的」，之後刷卡才叫得動它。
+  // 先靜音播第 1 部再馬上停掉，順便把開頭先載進來，刷卡時反應更快。
+  try {
+    player.muted = true;
+    player.src   = `videos/1.mp4`;
+    await player.play();
+    player.pause();
+    player.currentTime = 0;
+  } catch { /* 沒載到也沒關係，不影響後面 */ }
+  player.muted = false;
 
-// ---------- 播放 ----------
+  keepAwake();
+});
+
+/* ══════════════════════════════════════════════════════
+ *  播放
+ * ══════════════════════════════════════════════════════ */
+
 function play(n) {
-  if (n < 1 || n > 8) return;
+  idle.classList.add('hide');
+  playing = true;
 
-  idle.style.display = 'none';
-  title.textContent = '影片 ' + n;
+  title.textContent = CONFIG.TITLES[n - 1] || `影片 ${n}`;
   title.classList.add('show');
+  setTimeout(() => title.classList.remove('show'), 3500);
 
-  player.src = 'videos/' + n + '.mp4';
-  player.play().catch(() => {});
+  const src = `videos/${n}.mp4`;
 
-  setTimeout(() => title.classList.remove('show'), 3000);
+  // 同一部再刷一次 = 從頭重播，不用重載
+  if (player.src.endsWith(src) && player.readyState > 0) {
+    player.currentTime = 0;
+  } else {
+    player.src = src;
+    player.load();
+  }
+
+  player.play().catch(() => {
+    // 極少數情況（例如剛好斷網）播不起來，回待機而不是卡住
+    backToIdle('影片播不起來，請再刷一次');
+  });
 }
 
-// 播完回到待機
-player.addEventListener('ended', () => {
-  idle.style.display = 'flex';
+function backToIdle(msg) {
+  playing = false;
+  idle.classList.remove('hide');
   title.classList.remove('show');
+  if (msg) $('#idleMsg').textContent = msg;
+}
+
+player.addEventListener('ended', () => backToIdle());
+
+player.addEventListener('error', () => {
+  // 沒有設 src 的時候瀏覽器也會丟 error，那個不是真的失敗，要忽略
+  if (!player.getAttribute('src')) return;
+  if (!playing) return;
+  backToIdle('影片載入失敗，請確認已上傳');
 });
 
-// 影片載入失敗
-player.addEventListener('error', () => {
-  idle.style.display = 'flex';
-  $('#idleMsg').textContent = '影片載入失敗，請確認已上傳';
+/* ══════════════════════════════════════════════════════
+ *  展示模式的小細節
+ * ══════════════════════════════════════════════════════ */
+
+// 別讓平板睡著
+let wakeLock = null;
+async function keepAwake() {
+  if (!('wakeLock' in navigator)) return;
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+}
+
+// 切走再切回來時，螢幕鎖會失效，要重新拿
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && ready) keepAwake();
 });
+
+// 全螢幕
+$('#fs').addEventListener('click', e => {
+  e.stopPropagation();
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+});
+
+// 閒置 3 秒就把角落的東西淡掉，畫面留給影片
+let calmTimer;
+function stayAlert() {
+  document.body.classList.remove('calm');
+  clearTimeout(calmTimer);
+  calmTimer = setTimeout(() => document.body.classList.add('calm'), 3000);
+}
+['mousemove', 'touchstart', 'keydown'].forEach(ev =>
+  document.addEventListener(ev, stayAlert, { passive: true })
+);
+stayAlert();
+
+// 展示現場防呆：右鍵選單、雙指縮放都關掉
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('gesturestart', e => e.preventDefault());
 </script>
 </body>
 </html>

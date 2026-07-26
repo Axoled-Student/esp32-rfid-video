@@ -4,456 +4,569 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>影片上傳面板</title>
+<link rel="stylesheet" href="assets/style.css">
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body {
-    background:#0d0d0f; color:#eee; min-height:100vh; padding:24px 16px;
-    font-family:system-ui,"Microsoft JhengHei","PingFang TC",sans-serif;
-    line-height:1.6;
+  .keyrow { display:flex; gap:9px; flex-wrap:wrap; }
+
+  /* 已存金鑰時的小綠勾 */
+  .keyrow .saved {
+    display:none; align-items:center; gap:6px;
+    font-size:.85rem; color:var(--ok);
   }
-  .wrap { max-width:760px; margin:0 auto; }
+  .keyrow.has .saved { display:flex; }
 
-  h1 { font-size:1.6rem; margin-bottom:6px; }
-  .sub { color:#888; font-size:.92rem; margin-bottom:22px; }
-
-  .card {
-    background:#16161a; border:1px solid #2a2a32;
-    border-radius:12px; padding:18px; margin-bottom:16px;
-  }
-  .card h2 { font-size:1.05rem; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
-  .card h2 .n {
-    background:#2563eb; width:22px; height:22px; border-radius:50%;
-    font-size:.8rem; display:grid; place-items:center; flex:none;
-  }
-
-  /* 金鑰輸入 */
-  .keyrow { display:flex; gap:8px; flex-wrap:wrap; }
-  input[type=password], input[type=text] {
-    flex:1; min-width:200px; padding:11px 13px; font-size:.95rem;
-    background:#0d0d0f; border:1px solid #333; border-radius:8px; color:#eee;
-    font-family:ui-monospace,monospace;
-  }
-  input:focus { outline:none; border-color:#2563eb; }
-
-  button {
-    padding:11px 20px; font-size:.95rem; font-weight:600; cursor:pointer;
-    background:#2563eb; color:#fff; border:none; border-radius:8px;
-    transition:.15s; white-space:nowrap;
-  }
-  button:hover:not(:disabled) { background:#1d4ed8; }
-  button:disabled { background:#333; color:#777; cursor:not-allowed; }
-  button.ghost { background:#26262e; border:1px solid #3a3a44; }
-  button.ghost:hover:not(:disabled) { background:#32323c; }
-
-  .hint { font-size:.85rem; color:#777; margin-top:10px; }
-  .hint a { color:#60a5fa; }
-
-  /* 8 個影片格 */
-  .slots { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
+  /* ── 影片格子 ── */
   .slot {
-    background:#0d0d0f; border:1.5px dashed #333; border-radius:10px;
-    padding:14px 12px; cursor:pointer; transition:.15s; text-align:center;
+    background:var(--bg); border:1.5px dashed var(--line);
+    border-radius:var(--r); padding:16px 12px; cursor:pointer;
+    text-align:center; transition:.15s; position:relative; overflow:hidden;
   }
-  .slot:hover { border-color:#2563eb; background:#12121a; }
-  .slot.filled { border-style:solid; border-color:#22c55e; background:#0f1a12; }
-  .slot .num { font-size:1.5rem; font-weight:700; color:#555; }
-  .slot.filled .num { color:#22c55e; }
-  .slot .name {
-    font-size:.78rem; color:#999; margin-top:4px;
+  .slot:hover  { border-color:var(--accent); background:#101018; }
+  .slot.over   { border-color:var(--accent); background:#101828; border-style:solid; }
+
+  .slot .num   { font-size:1.7rem; font-weight:700; color:var(--text-mute); line-height:1.2; }
+  .slot .name  {
+    font-size:.76rem; color:var(--text-mute); margin-top:3px;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
-  .slot.filled .name { color:#86efac; }
 
-  /* 進度 */
-  #progress { display:none; }
-  .bar { height:8px; background:#26262e; border-radius:99px; overflow:hidden; margin-bottom:12px; }
-  .bar > i { display:block; height:100%; width:0; background:#2563eb; transition:width .3s; }
-  #log {
-    background:#0a0a0c; border:1px solid #26262e; border-radius:8px;
-    padding:12px; font-size:.85rem; font-family:ui-monospace,monospace;
-    max-height:220px; overflow-y:auto; white-space:pre-wrap; color:#aaa;
-  }
-  #log .ok  { color:#4ade80; }
-  #log .err { color:#f87171; }
-  #log .warn{ color:#fbbf24; }
+  /* 已選檔案 */
+  .slot.picked { border-style:solid; border-color:#1c5c3a; background:#0d1a13; }
+  .slot.picked .num  { color:var(--ok); }
+  .slot.picked .name { color:#86efac; }
 
-  .banner {
-    padding:12px 14px; border-radius:8px; font-size:.9rem; margin-bottom:14px;
+  /* 網站上已經有的影片 */
+  .slot.online { border-style:solid; border-color:var(--line); }
+  .slot.online .num  { color:var(--text-dim); }
+  .slot.online .name { color:var(--text-mute); }
+
+  /* 上傳成功 */
+  .slot.done { border-color:var(--accent); background:#0d1420; }
+  .slot.done .num  { color:var(--accent); }
+  .slot.done .name { color:#93c5fd; }
+
+  /* 右上角的清除鈕 */
+  .slot .clear {
+    position:absolute; top:5px; right:7px;
+    width:20px; height:20px; border-radius:50%;
+    background:rgba(0,0,0,.55); color:var(--text-dim);
+    font-size:.75rem; line-height:20px; display:none;
   }
-  .banner.warn { background:#2a2010; border:1px solid #6b4a10; color:#fcd34d; }
-  .banner.ok   { background:#0f1f14; border:1px solid #1a5c32; color:#86efac; }
+  .slot.picked .clear { display:block; }
+  .slot .clear:hover  { color:var(--err); background:rgba(0,0,0,.8); }
+
+  #progress { display:none; margin-top:18px; }
+
+  .callout {
+    padding:13px 15px; border-radius:var(--r-sm); font-size:.88rem;
+    background:var(--surface-2); border:1px solid var(--line-soft);
+    color:var(--text-dim); margin-top:14px;
+  }
+  .callout a { color:var(--accent); text-decoration:none; }
+  .callout a:hover { text-decoration:underline; }
+  .callout.ok { background:#0d1f16; border-color:#1c5c3a; color:#86efac; }
 </style>
 </head>
 <body>
+<div class="page">
 <div class="wrap">
 
-  <h1>影片上傳面板</h1>
-  <p class="sub">選好影片按上傳，雲端會自動轉檔，什麼格式都可以 🎬</p>
+  <div class="head">
+    <h1>影片上傳面板</h1>
+    <p>選好影片按上傳，雲端會自動轉檔，什麼格式都吃。</p>
+  </div>
 
-  <!-- 步驟 1：金鑰 -->
+  <!-- 步驟 1 -->
   <div class="card">
-    <h2><span class="n">1</span>貼上你的金鑰</h2>
-    <div class="keyrow">
-      <input type="password" id="token" placeholder="ghp_ 開頭那一串" autocomplete="off">
+    <h2><span class="step">1</span>貼上金鑰</h2>
+    <div class="keyrow" id="keyrow">
+      <input type="password" id="token" placeholder="ghp_ 開頭那一串" autocomplete="off" spellcheck="false">
       <button class="ghost" id="saveKey">記住</button>
+      <span class="saved">✓ 已記住</span>
     </div>
     <p class="hint">
-      金鑰只存在你自己的瀏覽器，不會傳給任何人。
-      <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=影片上傳面板" target="_blank">按這裡去拿一組 →</a>
+      金鑰只存在你自己的瀏覽器，不會傳給別人。權限要勾 <code>repo</code>。
+      <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=影片上傳面板" target="_blank" rel="noopener">去拿一組 →</a>
     </p>
   </div>
 
-  <!-- 步驟 2：選影片 -->
+  <!-- 步驟 2 -->
   <div class="card">
-    <h2><span class="n">2</span>選影片</h2>
-    <div class="slots" id="slots"></div>
-    <p class="hint">點方格選檔案。不用 8 部都選，選幾部傳幾部。單檔請低於 100MB。</p>
+    <h2><span class="step">2</span>選影片</h2>
+    <div class="grid" id="slots"></div>
+    <p class="hint">點格子選檔案，或直接把影片拖進來。不用 8 部都換，換幾部選幾部。單檔上限 100MB。</p>
   </div>
 
-  <!-- 步驟 3：上傳 -->
+  <!-- 步驟 3 -->
   <div class="card">
-    <h2><span class="n">3</span>開始上傳</h2>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button id="go" style="flex:1;min-width:180px">開始上傳</button>
-      <button class="ghost" onclick="location.href='./'">看網站</button>
+    <h2><span class="step">3</span>上傳</h2>
+    <div class="btn-row">
+      <button id="go" style="flex:1;min-width:170px">開始上傳</button>
       <button class="ghost" id="viewActions">看轉檔進度</button>
     </div>
 
-    <div id="progress" style="margin-top:16px">
+    <div id="progress">
       <div class="bar"><i id="barFill"></i></div>
-      <div id="log"></div>
+      <div class="log" id="log"></div>
     </div>
   </div>
 
+  <div class="nav">
+    <a href="./">◱ 測試頁</a>
+    <a href="play.html">▶ 刷卡播放頁</a>
+    <a href="模擬刷卡.html">⊹ 模擬刷卡</a>
+  </div>
+
+</div>
 </div>
 
+<script src="assets/config.js"></script>
 <script>
-// ── 設定（如果你 fork 了這個專案，改這兩行）──────────────
-const OWNER = 'vin836';
-const REPO  = 'esp32-rfid-video';
-const BRANCH = 'main';
-// ────────────────────────────────────────────────
+const { OWNER, REPO, BRANCH } = CONFIG;
 
-const $ = s => document.querySelector(s);
-const files = {};            // { 1: File, 2: File, ... }
+const files = {};              // { 1: File, 2: File, ... }
 
-// ---------- 金鑰記憶 ----------
-const saved = localStorage.getItem('ghToken');
-if (saved) $('#token').value = saved;
+/* ══════════════════════════════════════════════════════
+ *  金鑰
+ * ══════════════════════════════════════════════════════ */
+
+const savedKey = localStorage.getItem('ghToken');
+if (savedKey) {
+  $('#token').value = savedKey;
+  $('#keyrow').classList.add('has');
+}
 
 $('#saveKey').onclick = () => {
   const t = $('#token').value.trim();
-  if (!t) { localStorage.removeItem('ghToken'); alert('已清除'); return; }
+  if (!t) {
+    localStorage.removeItem('ghToken');
+    $('#keyrow').classList.remove('has');
+    return;
+  }
   localStorage.setItem('ghToken', t);
-  alert('記住了，下次不用再貼');
+  $('#keyrow').classList.add('has');
 };
 
 $('#viewActions').onclick = () =>
-  window.open(`https://github.com/${OWNER}/${REPO}/actions`, '_blank');
+  window.open(`https://github.com/${OWNER}/${REPO}/actions`, '_blank', 'noopener');
 
-// ---------- 建立 8 個格子 ----------
-const slots = $('#slots');
-for (let i = 1; i <= 8; i++) {
+/* ══════════════════════════════════════════════════════
+ *  8 個格子（點選 + 拖放）
+ * ══════════════════════════════════════════════════════ */
+
+const slotsEl = $('#slots');
+
+SLOTS.forEach(n => {
   const d = document.createElement('div');
   d.className = 'slot';
-  d.id = 'slot' + i;
-  d.innerHTML = `<div class="num">${i}</div><div class="name">點這裡選檔案</div>`;
-  d.onclick = () => pick(i);
-  slots.appendChild(d);
-}
+  d.id = 'slot' + n;
+  d.innerHTML =
+    `<div class="clear" title="取消">✕</div>
+     <div class="num">${n}</div>
+     <div class="name">點這裡選檔案</div>`;
+
+  d.onclick = e => {
+    if (e.target.classList.contains('clear')) { clearSlot(n); return; }
+    pick(n);
+  };
+
+  // 拖放
+  d.addEventListener('dragover', e => {
+    e.preventDefault();
+    d.classList.add('over');
+  });
+  d.addEventListener('dragleave', () => d.classList.remove('over'));
+  d.addEventListener('drop', e => {
+    e.preventDefault();
+    d.classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f) accept(n, f);
+  });
+
+  slotsEl.appendChild(d);
+});
+
+// 拖到頁面其他地方不要讓瀏覽器直接開檔案
+['dragover', 'drop'].forEach(ev =>
+  document.addEventListener(ev, e => e.preventDefault())
+);
 
 function pick(n) {
   const inp = document.createElement('input');
   inp.type = 'file';
   inp.accept = 'video/*';
-  inp.onchange = () => {
-    const f = inp.files[0];
-    if (!f) return;
-
-    const mb = f.size / 1048576;
-    if (mb > 100) {
-      alert(`這個檔案有 ${mb.toFixed(0)}MB，超過 GitHub 的 100MB 上限。\n請把影片剪短一點再試。`);
-      return;
-    }
-    if (mb > 25) {
-      say2(`第 ${n} 部有 ${mb.toFixed(0)}MB，上傳時會自動分段處理`);
-    }
-
-    files[n] = f;
-    const el = document.getElementById('slot' + n);
-    el.classList.add('filled');
-    el.querySelector('.name').textContent = `${f.name} (${mb.toFixed(1)}MB)`;
-  };
+  inp.onchange = () => { if (inp.files[0]) accept(n, inp.files[0]); };
   inp.click();
 }
 
-// ---------- 記錄訊息 ----------
+function accept(n, f) {
+  const mb = f.size / 1048576;
+
+  if (mb > 100) {
+    alert(`這個檔案有 ${mb.toFixed(0)}MB，超過 GitHub 的 100MB 上限。\n請把影片剪短，或先壓縮一下。`);
+    return;
+  }
+
+  files[n] = f;
+  const el = $('#slot' + n);
+  el.className = 'slot picked';
+  el.querySelector('.name').textContent = `${f.name} · ${mb.toFixed(1)}MB`;
+  el.querySelector('.name').title = f.name;
+}
+
+function clearSlot(n) {
+  delete files[n];
+  const el = $('#slot' + n);
+  el.className = 'slot';
+  el.querySelector('.name').textContent = '點這裡選檔案';
+  markOnline(n);
+}
+
+/* ── 標出網站上已經有哪幾部（讓人知道哪些不用重傳）──────── */
+
+const onlineSizes = {};
+
+async function markOnline(n) {
+  if (files[n]) return;
+  try {
+    const r = await fetch(`videos/${n}.mp4`, { method: 'HEAD', cache: 'no-store' });
+    if (!r.ok) return;
+    const bytes = Number(r.headers.get('content-length') || 0);
+    if (bytes < 20000) return;          // 太小，當作沒有
+
+    onlineSizes[n] = bytes;
+    const el = $('#slot' + n);
+    if (el.classList.contains('picked')) return;
+    el.className = 'slot online';
+    el.querySelector('.name').textContent = `目前 ${(bytes / 1048576).toFixed(1)}MB`;
+  } catch {}
+}
+
+SLOTS.forEach(markOnline);
+
+/* ══════════════════════════════════════════════════════
+ *  記錄
+ * ══════════════════════════════════════════════════════ */
+
 function say(msg, cls = '') {
-  const log = $('#log');
   const line = document.createElement('div');
   if (cls) line.className = cls;
   line.textContent = msg;
-  log.appendChild(line);
-  log.scrollTop = log.scrollHeight;
+  $('#log').appendChild(line);
+  $('#log').scrollTop = $('#log').scrollHeight;
 }
+
 const setBar = pct => $('#barFill').style.width = pct + '%';
 
-// 選檔階段的提示（那時 log 區還沒展開）
-function say2(msg) {
-  $('#progress').style.display = 'block';
-  say(msg, 'warn');
-}
+/* ══════════════════════════════════════════════════════
+ *  檔案 → base64（GitHub API 只收這種格式）
+ *  一次讀 2MB，讀完轉完就丟，記憶體才不會爆
+ * ══════════════════════════════════════════════════════ */
 
-// ---------- 檔案轉 base64（GitHub API 要這格式）----------
-// 大檔案不能一次讀，會爆記憶體，所以切成小塊慢慢轉
-function toBase64(file, onProgress) {
+function toBase64(blob, onProgress) {
   return new Promise((resolve, reject) => {
-    const CHUNK = 1048576;            // 一次讀 1MB
+    const CHUNK  = 2 * 1048576;
     const reader = new FileReader();
     let offset = 0;
     let binary = '';
 
+    reader.onerror = () => reject(new Error('讀取檔案失敗'));
+
     reader.onload = () => {
       const bytes = new Uint8Array(reader.result);
-      // 一次轉 8KB，避免參數太多爆掉
-      for (let i = 0; i < bytes.length; i += 8192) {
-        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      // 一次組 32KB，太多參數 String.fromCharCode 會爆掉
+      for (let i = 0; i < bytes.length; i += 32768) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
       }
-      offset += CHUNK;
 
-      if (onProgress) onProgress(Math.min(offset / file.size, 1));
+      offset = Math.min(offset + CHUNK, blob.size);
+      onProgress?.(offset / blob.size);
 
-      if (offset < file.size) {
-        readNext();
-      } else {
-        resolve(btoa(binary));
-      }
+      if (offset < blob.size) readNext();
+      else resolve(btoa(binary));
     };
-    reader.onerror = reject;
 
     function readNext() {
-      reader.readAsArrayBuffer(file.slice(offset, offset + CHUNK));
+      reader.readAsArrayBuffer(blob.slice(offset, offset + CHUNK));
     }
     readNext();
   });
 }
 
-// ---------- 呼叫 GitHub ----------
+/* ══════════════════════════════════════════════════════
+ *  呼叫 GitHub
+ * ══════════════════════════════════════════════════════ */
+
 async function gh(path, opts = {}) {
   const token = $('#token').value.trim();
   const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}${path}`, {
     ...opts,
     headers: {
       'Authorization': `Bearer ${token}`,
-      'Accept': 'application/vnd.github+json',
+      'Accept':        'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
       ...(opts.headers || {}),
     },
   });
   return res;
 }
 
-// ---------- 清掉這個編號的所有舊檔 ----------
-// 包含副檔名不同的、以及之前分段上傳留下的碎片
-async function cleanOld(n, keepExt) {
-  const r = await gh(`/contents/raw?ref=${BRANCH}`);
-  if (!r.ok) return;
-
-  const list = await r.json();
-  const targets = list.filter(f => {
-    const m = f.name.match(/^(\d+)\./);
-    if (!m || Number(m[1]) !== n) return false;
-    // 同名同副檔名的會被覆蓋，不用先刪
-    return f.name !== `${n}${keepExt}`;
-  });
-
-  for (const t of targets) {
-    await gh(`/contents/raw/${t.name}`, {
-      method: 'DELETE',
-      body: JSON.stringify({ message: `移除舊的 ${t.name}`, sha: t.sha, branch: BRANCH }),
-    });
-    say(`  清掉舊檔 ${t.name}`, 'warn');
-  }
+// 抓錯誤訊息，方便看懂哪裡出問題
+async function ghError(res) {
+  const e = await res.json().catch(() => ({}));
+  return e.message || `HTTP ${res.status}`;
 }
 
-// ---------- 大檔案上傳（切成好幾塊分別送）----------
-// GitHub 一次只收得下約 20MB，大檔案要切開來送，
-// 送完之後雲端的小機器人會自動把它們接回原本的影片。
-async function uploadBig(path, file, n) {
-  const PART = 12 * 1048576;                    // 一塊 12MB
-  const total = Math.ceil(file.size / PART);
+/* ══════════════════════════════════════════════════════
+ *  上傳主流程
+ *
+ *  重點：全部檔案先變成 blob 傳上去，最後「一次」commit。
+ *  這樣不管換幾部影片，轉檔機器人都只會被叫醒一次，
+ *  也不會出現傳到一半半新半舊的狀態。
+ * ══════════════════════════════════════════════════════ */
 
-  say(`  檔案較大，切成 ${total} 塊分別上傳`, 'warn');
-
-  const ext = (path.match(/\.[^.]+$/) || ['.mp4'])[0];
-  const partShas = [];
-
-  // 一塊一塊送上去
-  for (let i = 0; i < total; i++) {
-    const slice = file.slice(i * PART, (i + 1) * PART);
-    say(`  第 ${i + 1}/${total} 塊 轉換中...`);
-    const b64 = await toBase64(slice);
-
-    say(`  第 ${i + 1}/${total} 塊 上傳中...`);
-    const r = await gh('/git/blobs', {
-      method: 'POST',
-      body: JSON.stringify({ content: b64, encoding: 'base64' }),
-    });
-
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      say(`  失敗：${e.message || r.status}`, 'err');
-      return false;
-    }
-    partShas.push((await r.json()).sha);
-    say(`  第 ${i + 1}/${total} 塊 好了`, 'ok');
-  }
-
-  // 把每一塊掛上去，檔名像 raw/1.mp4.part001
-  const treeItems = partShas.map((sha, i) => ({
-    path: `raw/${n}${ext}.part${String(i + 1).padStart(3, '0')}`,
-    mode: '100644', type: 'blob', sha,
-  }));
-
-  return await commitTree(treeItems, `上傳第 ${n} 部影片（分 ${total} 塊）`);
-}
-
-// ---------- 把檔案掛到分支上 ----------
-async function commitTree(treeItems, message) {
-  try {
-    // 2. 找出目前分支的位置
-    const refRes = await gh(`/git/ref/heads/${BRANCH}`);
-    if (!refRes.ok) { say('  讀取分支失敗', 'err'); return false; }
-    const baseSha = (await refRes.json()).object.sha;
-
-    const commitRes = await gh(`/git/commits/${baseSha}`);
-    if (!commitRes.ok) { say('  讀取紀錄失敗', 'err'); return false; }
-    const treeSha = (await commitRes.json()).tree.sha;
-
-    // 3. 建立新的檔案結構
-    say('  整理檔案結構...');
-    const newTree = await gh('/git/trees', {
-      method: 'POST',
-      body: JSON.stringify({ base_tree: treeSha, tree: treeItems }),
-    });
-    if (!newTree.ok) {
-      const e = await newTree.json().catch(() => ({}));
-      say(`  失敗：${e.message || newTree.status}`, 'err');
-      return false;
-    }
-    const newTreeSha = (await newTree.json()).sha;
-
-    // 4. 建立一筆紀錄
-    const newCommit = await gh('/git/commits', {
-      method: 'POST',
-      body: JSON.stringify({ message, tree: newTreeSha, parents: [baseSha] }),
-    });
-    if (!newCommit.ok) { say('  建立紀錄失敗', 'err'); return false; }
-    const newCommitSha = (await newCommit.json()).sha;
-
-    // 5. 把分支移到新紀錄上
-    const upd = await gh(`/git/refs/heads/${BRANCH}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ sha: newCommitSha }),
-    });
-    if (!upd.ok) {
-      const e = await upd.json().catch(() => ({}));
-      say(`  失敗：${e.message || upd.status}`, 'err');
-      return false;
-    }
-
-    return true;
-
-  } catch (err) {
-    say(`  出錯：${err.message}`, 'err');
-    return false;
-  }
-}
-
-// ---------- 上傳主流程 ----------
 $('#go').onclick = async () => {
   const token = $('#token').value.trim();
   const list  = Object.keys(files).map(Number).sort((a, b) => a - b);
 
   if (!token)       { alert('請先貼上金鑰'); return; }
-  if (!list.length) { alert('還沒選任何影片喔'); return; }
+  if (!list.length) { alert('還沒選任何影片'); return; }
 
   $('#go').disabled = true;
-  $('#go').textContent = '上傳中...';
+  $('#go').textContent = '上傳中…';
   $('#progress').style.display = 'block';
   $('#log').innerHTML = '';
   setBar(0);
 
+  // 上傳過程中不小心關掉分頁會很痛，先攔一下
+  const guard = e => { e.preventDefault(); e.returnValue = ''; };
+  window.addEventListener('beforeunload', guard);
+
   try {
-    // 先確認金鑰有效
-    say('檢查金鑰...');
+    /* ── 1. 驗金鑰 ─────────────────────────────────── */
+    say('檢查金鑰…', 'dim');
     const check = await gh('');
-    if (check.status === 401) { say('金鑰無效或已過期', 'err'); return; }
-    if (check.status === 404) { say('找不到倉庫，或金鑰沒有權限', 'err'); return; }
-    if (!check.ok)            { say(`連線失敗 (${check.status})`, 'err'); return; }
+
+    if (check.status === 401) { say('金鑰無效或已過期，請重新拿一組', 'err'); return; }
+    if (check.status === 403) { say('金鑰權限不足，建立時要勾 repo', 'err'); return; }
+    if (check.status === 404) { say('找不到倉庫，或這組金鑰沒有權限', 'err'); return; }
+    if (!check.ok)            { say(`連線失敗（${check.status}）`, 'err'); return; }
+
+    const repo = await check.json();
+    if (!repo.permissions?.push) {
+      say('這組金鑰只能讀、不能寫，請重新建立並勾 repo', 'err');
+      return;
+    }
     say('金鑰沒問題', 'ok');
 
-    // 一部一部傳
-    let done = 0;
-    for (const n of list) {
-      const f    = files[n];
-      const ext  = (f.name.match(/\.[^.]+$/) || ['.mp4'])[0].toLowerCase();
-      const path = `raw/${n}${ext}`;
-
-      const mb = f.size / 1048576;
-      say(`\n第 ${n} 部：${f.name} (${mb.toFixed(1)}MB)`);
-
-      // 先清掉這個編號的所有舊檔（含之前分段留下的碎片）
-      await cleanOld(n, ext);
-
-      let okUpload = false;
-
-      if (mb <= 12) {
-        // 小檔案：一次搞定
-        say('  上傳中...');
-        const content = await toBase64(f);
-
-        let sha;
-        const exist = await gh(`/contents/${path}?ref=${BRANCH}`);
-        if (exist.ok) sha = (await exist.json()).sha;
-
-        const put = await gh(`/contents/${path}`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            message: `更新第 ${n} 部影片`,
-            content, branch: BRANCH,
-            ...(sha ? { sha } : {}),
-          }),
-        });
-        if (put.ok) okUpload = true;
-        else {
-          const e = await put.json().catch(() => ({}));
-          say(`  失敗：${e.message || put.status}`, 'err');
-        }
-      } else {
-        // 大檔案：切成好幾塊分別送
-        okUpload = await uploadBig(path, f, n);
-      }
-
-      if (!okUpload) continue;
-
-      done++;
-      say(`  第 ${n} 部好了`, 'ok');
-      setBar(Math.round((done / list.length) * 90));
+    /* ── 2. 讀目前 raw/ 有哪些檔（等下要清掉舊的）───── */
+    const oldFiles = [];
+    const rawRes = await gh(`/contents/raw?ref=${BRANCH}`);
+    if (rawRes.ok) {
+      const arr = await rawRes.json();
+      if (Array.isArray(arr)) oldFiles.push(...arr.map(f => f.name));
     }
 
+    /* ── 3. 一部一部轉成 blob 送上去 ────────────────── */
+    // 總位元組數，拿來算整體進度
+    const totalBytes = list.reduce((s, n) => s + files[n].size, 0);
+    let doneBytes = 0;
+
+    const treeItems = [];
+    const okList = [];
+
+    for (const n of list) {
+      const f   = files[n];
+      const ext = (f.name.match(/\.[^.]+$/) || ['.mp4'])[0].toLowerCase();
+      const mb  = f.size / 1048576;
+
+      say(`\n第 ${n} 部　${f.name}（${mb.toFixed(1)}MB）`);
+
+      // 大檔切塊：GitHub 單次請求約 20MB 上限，切 10MB 保險
+      const PART  = 10 * 1048576;
+      const parts = Math.ceil(f.size / PART);
+
+      if (parts > 1) say(`  太大，切成 ${parts} 塊送`, 'warn');
+
+      const shas = [];
+      let failed = false;
+
+      for (let i = 0; i < parts; i++) {
+        const slice = f.slice(i * PART, (i + 1) * PART);
+        const label = parts > 1 ? `第 ${i + 1}/${parts} 塊` : '檔案';
+
+        const b64 = await toBase64(slice, p => {
+          // 整體進度：已完成的位元組 + 這一塊已讀的比例
+          const cur = doneBytes + i * PART + p * slice.size;
+          setBar(Math.round((cur / totalBytes) * 85));
+        });
+
+        say(`  ${label} 上傳中…`, 'dim');
+
+        const r = await gh('/git/blobs', {
+          method: 'POST',
+          body: JSON.stringify({ content: b64, encoding: 'base64' }),
+        });
+
+        if (!r.ok) {
+          say(`  失敗：${await ghError(r)}`, 'err');
+          failed = true;
+          break;
+        }
+        shas.push((await r.json()).sha);
+      }
+
+      doneBytes += f.size;
+
+      if (failed) {
+        say(`  第 ${n} 部沒傳成功，跳過`, 'err');
+        continue;
+      }
+
+      // 掛進檔案結構：單塊直接 raw/1.mp4，多塊 raw/1.mp4.part001…
+      shas.forEach((sha, i) => {
+        treeItems.push({
+          path: parts === 1
+            ? `raw/${n}${ext}`
+            : `raw/${n}${ext}.part${String(i + 1).padStart(3, '0')}`,
+          mode: '100644', type: 'blob', sha,
+        });
+      });
+
+      okList.push(n);
+      say(`  第 ${n} 部好了`, 'ok');
+    }
+
+    if (!okList.length) {
+      say('\n沒有任何影片上傳成功', 'err');
+      return;
+    }
+
+    /* ── 4. 把這幾個編號的舊檔標記成刪除 ─────────────
+     * 不刪的話，raw/1.mov 和 raw/1.mp4 會同時存在，
+     * 轉檔機器人不知道該用哪個。sha:null = 刪掉。
+     * ─────────────────────────────────────────────── */
+    const keep = new Set(treeItems.map(t => t.path.replace(/^raw\//, '')));
+
+    for (const name of oldFiles) {
+      const m = name.match(/^(\d+)\./);
+      if (!m) continue;                          // 說明文件之類的留著
+      if (!okList.includes(Number(m[1]))) continue;   // 不是這次換的，不動
+      if (keep.has(name)) continue;              // 同名會被覆蓋，不用刪
+
+      treeItems.push({ path: `raw/${name}`, mode: '100644', type: 'blob', sha: null });
+    }
+
+    /* ── 5. 一次 commit ─────────────────────────────── */
+    say('\n整理檔案結構…', 'dim');
+    setBar(90);
+
+    const ok = await commitAll(
+      treeItems,
+      `上傳影片：第 ${okList.join('、')} 部`
+    );
+
+    if (!ok) return;
+
     setBar(100);
-    say('\n────────────────────');
-    say(`上傳完成，共 ${done} 部`, 'ok');
+    okList.forEach(n => {
+      const el = $('#slot' + n);
+      el.className = 'slot done';
+      el.querySelector('.name').textContent = '已上傳，轉檔中';
+    });
+
+    say('\n────────────────────────');
+    say(`上傳完成，共 ${okList.length} 部`, 'ok');
     say('雲端正在自動轉檔，約 3~5 分鐘');
-    say('可以按「看轉檔進度」看目前跑到哪');
+
+    watchConvert();
 
   } catch (err) {
     say(`\n出錯了：${err.message}`, 'err');
   } finally {
+    window.removeEventListener('beforeunload', guard);
     $('#go').disabled = false;
     $('#go').textContent = '開始上傳';
   }
 };
+
+/* ══════════════════════════════════════════════════════
+ *  建立一筆 commit，把所有檔案一次掛上去
+ * ══════════════════════════════════════════════════════ */
+
+async function commitAll(treeItems, message) {
+  // 目前分支停在哪
+  const refRes = await gh(`/git/ref/heads/${BRANCH}`);
+  if (!refRes.ok) { say(`讀取分支失敗：${await ghError(refRes)}`, 'err'); return false; }
+  const baseSha = (await refRes.json()).object.sha;
+
+  const commitRes = await gh(`/git/commits/${baseSha}`);
+  if (!commitRes.ok) { say(`讀取紀錄失敗：${await ghError(commitRes)}`, 'err'); return false; }
+  const baseTree = (await commitRes.json()).tree.sha;
+
+  // 新的檔案結構
+  const treeRes = await gh('/git/trees', {
+    method: 'POST',
+    body: JSON.stringify({ base_tree: baseTree, tree: treeItems }),
+  });
+  if (!treeRes.ok) { say(`建立結構失敗：${await ghError(treeRes)}`, 'err'); return false; }
+  const newTree = (await treeRes.json()).sha;
+
+  // 新的紀錄
+  const newCommitRes = await gh('/git/commits', {
+    method: 'POST',
+    body: JSON.stringify({ message, tree: newTree, parents: [baseSha] }),
+  });
+  if (!newCommitRes.ok) { say(`建立紀錄失敗：${await ghError(newCommitRes)}`, 'err'); return false; }
+  const newCommit = (await newCommitRes.json()).sha;
+
+  // 分支移過去
+  const upd = await gh(`/git/refs/heads/${BRANCH}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ sha: newCommit }),
+  });
+  if (!upd.ok) { say(`更新分支失敗：${await ghError(upd)}`, 'err'); return false; }
+
+  return true;
+}
+
+/* ══════════════════════════════════════════════════════
+ *  自動追蹤轉檔進度，不用自己去 Actions 頁面盯
+ * ══════════════════════════════════════════════════════ */
+
+async function watchConvert() {
+  say('\n追蹤轉檔進度中…', 'dim');
+
+  let noRunCount = 0;
+
+  for (let i = 0; i < 60; i++) {                 // 最多盯 5 分鐘
+    await new Promise(r => setTimeout(r, 5000));
+
+    const r = await gh('/actions/runs?per_page=1');
+    if (!r.ok) { say('（讀不到進度，請自己看 Actions 頁面）', 'warn'); return; }
+
+    const run = (await r.json()).workflow_runs?.[0];
+
+    if (!run) {
+      if (++noRunCount > 6) { say('（還沒看到轉檔工作，請自己看 Actions 頁面）', 'warn'); return; }
+      continue;
+    }
+
+    if (run.status === 'completed') {
+      if (run.conclusion === 'success') {
+        say('轉檔完成，影片已經上線', 'ok');
+        say('可以去測試頁確認', 'ok');
+      } else {
+        say(`轉檔失敗（${run.conclusion}），按「看轉檔進度」查原因`, 'err');
+      }
+      return;
+    }
+
+    if (i % 3 === 0) say(`  轉檔中…（${run.status === 'queued' ? '排隊中' : '進行中'}）`, 'dim');
+  }
+
+  say('（等太久了，請按「看轉檔進度」自己看）', 'warn');
+}
 </script>
 </body>
 </html>
