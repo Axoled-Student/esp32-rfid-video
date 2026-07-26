@@ -32,6 +32,25 @@ jobs:
           sudo apt-get install -y -qq ffmpeg
           ffmpeg -version | head -1
 
+      - name: 把分段上傳的檔案接回來
+        run: |
+          # 大影片上傳時會被切成 1.mp4.part001、1.mp4.part002...
+          # 這裡照順序接回原本的檔案
+          shopt -s nullglob
+          for first in raw/*.part001; do
+            base="${first%.part001}"
+            parts=("$base".part*)
+            echo "▶ $base 由 ${#parts[@]} 塊組成，接合中"
+
+            # 照檔名排序才不會接錯順序
+            cat $(printf '%s\n' "${parts[@]}" | sort) > "$base"
+            rm -f "${parts[@]}"
+
+            size=$(du -h "$base" | cut -f1)
+            echo "✓ 接好了，大小 $size"
+          done
+          echo "接合完成"
+
       - name: 轉檔 raw/ -> videos/
         run: |
           mkdir -p videos
@@ -40,12 +59,12 @@ jobs:
 
           # raw/ 裡找 1~8 開頭的影片，不管副檔名是什麼
           for n in 1 2 3 4 5 6 7 8; do
-            # 找 raw/1.* 這種檔案（排除說明用的 .md）
+            # 找 raw/1.* 這種檔案（排除說明用的 .md 和碎片）
             src=""
             for f in raw/$n.*; do
               [ -e "$f" ] || continue
               case "$f" in
-                *.md|*.txt|*.gitkeep) continue ;;
+                *.md|*.txt|*.gitkeep|*.part[0-9][0-9][0-9]) continue ;;
               esac
               src="$f"
               break
@@ -106,7 +125,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add videos/
+          git add -A videos/ raw/
 
           if git diff --staged --quiet; then
             echo "沒有變化，不需要 commit"

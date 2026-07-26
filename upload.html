@@ -252,24 +252,74 @@ async function gh(path, opts = {}) {
   return res;
 }
 
-// ---------- 大檔案上傳 ----------
-// 一般的上傳方式超過 25MB 就會被擋，
-// 這裡改走 Git 的底層做法，先把檔案存成 blob，再掛到分支上。
-async function uploadBig(path, content, n) {
-  try {
-    // 1. 把檔案本體存進去
-    say('  存放檔案中...（大檔案需要一點時間）');
-    const blobRes = await gh('/git/blobs', {
-      method: 'POST',
-      body: JSON.stringify({ content, encoding: 'base64' }),
+// ---------- 清掉這個編號的所有舊檔 ----------
+// 包含副檔名不同的、以及之前分段上傳留下的碎片
+async function cleanOld(n, keepExt) {
+  const r = await gh(`/contents/raw?ref=${BRANCH}`);
+  if (!r.ok) return;
+
+  const list = await r.json();
+  const targets = list.filter(f => {
+    const m = f.name.match(/^(\d+)\./);
+    if (!m || Number(m[1]) !== n) return false;
+    // 同名同副檔名的會被覆蓋，不用先刪
+    return f.name !== `${n}${keepExt}`;
+  });
+
+  for (const t of targets) {
+    await gh(`/contents/raw/${t.name}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ message: `移除舊的 ${t.name}`, sha: t.sha, branch: BRANCH }),
     });
-    if (!blobRes.ok) {
-      const e = await blobRes.json().catch(() => ({}));
-      say(`  失敗：${e.message || blobRes.status}`, 'err');
+    say(`  清掉舊檔 ${t.name}`, 'warn');
+  }
+}
+
+// ---------- 大檔案上傳（切成好幾塊分別送）----------
+// GitHub 一次只收得下約 20MB，大檔案要切開來送，
+// 送完之後雲端的小機器人會自動把它們接回原本的影片。
+async function uploadBig(path, file, n) {
+  const PART = 12 * 1048576;                    // 一塊 12MB
+  const total = Math.ceil(file.size / PART);
+
+  say(`  檔案較大，切成 ${total} 塊分別上傳`, 'warn');
+
+  const ext = (path.match(/\.[^.]+$/) || ['.mp4'])[0];
+  const partShas = [];
+
+  // 一塊一塊送上去
+  for (let i = 0; i < total; i++) {
+    const slice = file.slice(i * PART, (i + 1) * PART);
+    say(`  第 ${i + 1}/${total} 塊 轉換中...`);
+    const b64 = await toBase64(slice);
+
+    say(`  第 ${i + 1}/${total} 塊 上傳中...`);
+    const r = await gh('/git/blobs', {
+      method: 'POST',
+      body: JSON.stringify({ content: b64, encoding: 'base64' }),
+    });
+
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      say(`  失敗：${e.message || r.status}`, 'err');
       return false;
     }
-    const blobSha = (await blobRes.json()).sha;
+    partShas.push((await r.json()).sha);
+    say(`  第 ${i + 1}/${total} 塊 好了`, 'ok');
+  }
 
+  // 把每一塊掛上去，檔名像 raw/1.mp4.part001
+  const treeItems = partShas.map((sha, i) => ({
+    path: `raw/${n}${ext}.part${String(i + 1).padStart(3, '0')}`,
+    mode: '100644', type: 'blob', sha,
+  }));
+
+  return await commitTree(treeItems, `上傳第 ${n} 部影片（分 ${total} 塊）`);
+}
+
+// ---------- 把檔案掛到分支上 ----------
+async function commitTree(treeItems, message) {
+  try {
     // 2. 找出目前分支的位置
     const refRes = await gh(`/git/ref/heads/${BRANCH}`);
     if (!refRes.ok) { say('  讀取分支失敗', 'err'); return false; }
@@ -283,10 +333,7 @@ async function uploadBig(path, content, n) {
     say('  整理檔案結構...');
     const newTree = await gh('/git/trees', {
       method: 'POST',
-      body: JSON.stringify({
-        base_tree: treeSha,
-        tree: [{ path, mode: '100644', type: 'blob', sha: blobSha }],
-      }),
+      body: JSON.stringify({ base_tree: treeSha, tree: treeItems }),
     });
     if (!newTree.ok) {
       const e = await newTree.json().catch(() => ({}));
@@ -298,11 +345,7 @@ async function uploadBig(path, content, n) {
     // 4. 建立一筆紀錄
     const newCommit = await gh('/git/commits', {
       method: 'POST',
-      body: JSON.stringify({
-        message: `更新第 ${n} 部影片`,
-        tree: newTreeSha,
-        parents: [baseSha],
-      }),
+      body: JSON.stringify({ message, tree: newTreeSha, parents: [baseSha] }),
     });
     if (!newCommit.ok) { say('  建立紀錄失敗', 'err'); return false; }
     const newCommitSha = (await newCommit.json()).sha;
@@ -358,37 +401,21 @@ $('#go').onclick = async () => {
 
       const mb = f.size / 1048576;
       say(`\n第 ${n} 部：${f.name} (${mb.toFixed(1)}MB)`);
-      say('  轉換中...');
-      const content = await toBase64(f, p => {
-        if (p < 1) setBar(Math.round((done / list.length) * 90 + p * (90 / list.length) * 0.4));
-      });
 
-      // 同編號的舊檔如果副檔名不同，先刪掉，避免兩個檔案打架
-      for (const old of ['.mp4','.mov','.avi','.mkv','.webm','.m4v','.wmv','.flv','.mpg','.mpeg']) {
-        if (old === ext) continue;
-        const p = `raw/${n}${old}`;
-        const r = await gh(`/contents/${p}?ref=${BRANCH}`);
-        if (r.ok) {
-          const info = await r.json();
-          await gh(`/contents/${p}`, {
-            method: 'DELETE',
-            body: JSON.stringify({ message: `移除舊的 ${p}`, sha: info.sha, branch: BRANCH }),
-          });
-          say(`  清掉舊檔 ${p}`, 'warn');
-        }
-      }
-
-      // 有舊檔就要帶 sha 才能覆蓋
-      let sha;
-      const exist = await gh(`/contents/${path}?ref=${BRANCH}`);
-      if (exist.ok) sha = (await exist.json()).sha;
-
-      say('  上傳中...');
+      // 先清掉這個編號的所有舊檔（含之前分段留下的碎片）
+      await cleanOld(n, ext);
 
       let okUpload = false;
 
-      if (mb <= 20) {
+      if (mb <= 12) {
         // 小檔案：一次搞定
+        say('  上傳中...');
+        const content = await toBase64(f);
+
+        let sha;
+        const exist = await gh(`/contents/${path}?ref=${BRANCH}`);
+        if (exist.ok) sha = (await exist.json()).sha;
+
         const put = await gh(`/contents/${path}`, {
           method: 'PUT',
           body: JSON.stringify({
@@ -403,8 +430,8 @@ $('#go').onclick = async () => {
           say(`  失敗：${e.message || put.status}`, 'err');
         }
       } else {
-        // 大檔案：走 Git 底層，分段送，可以到 100MB
-        okUpload = await uploadBig(path, content, n);
+        // 大檔案：切成好幾塊分別送
+        okUpload = await uploadBig(path, f, n);
       }
 
       if (!okUpload) continue;
