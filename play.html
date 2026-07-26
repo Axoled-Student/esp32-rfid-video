@@ -388,23 +388,49 @@ function setConn(cls, text) {
  *  解鎖 —— iPad Safari 規定：要有手勢，影片才准出聲
  * ══════════════════════════════════════════════════════ */
 
-unlock.addEventListener('click', async () => {
-  unlock.remove();
+/* iPad Safari 規定：影片要出聲音，必須由使用者的手勢觸發播放。
+ * 之後 ESP32 送訊息過來時沒有手勢，所以要趁這一下把「許可」拿到手。
+ *
+ * ⚠ 這段有三件事絕對不能改，改了 iPad 上就會沒聲音：
+ *
+ *   1. 不能靜音播。靜音播放本來就不需要許可，
+ *      所以靜音成功換不到「有聲播放」的許可。
+ *
+ *   2. 不能在 play() 之前 await 任何東西。手勢的效力只在這個
+ *      事件的同步執行期間，await 一下就過期了。
+ *
+ *   3. 事後不能呼叫 load()，那會把剛拿到的許可清掉。
+ *
+ * 做法：把音量壓到幾乎為零（不是靜音）播一下現成的影片，
+ * 在手勢當下同步呼叫。這樣既拿得到許可，觀眾也聽不到聲音。
+ * 播完馬上暫停、音量調回來，整個過程不到一秒。 */
+
+unlock.addEventListener('click', () => {
   ready = true;
 
-  // 在「手勢當下」真的播一次影片，瀏覽器才會把這個播放器記成
-  // 「使用者允許的」，之後刷卡才叫得動它。
-  try {
-    player.muted = true;
-    player.src   = 'videos/1.mp4';
-    await player.play();
-    player.pause();
-    player.currentTime = 0;
-  } catch { /* 沒載到也沒關係，不影響後面 */ }
-  player.muted = false;
-  player.removeAttribute('src');
-  player.load();
+  // ① 同步、不靜音地播 —— 這一步就是在換許可，不能 await
+  player.muted  = false;
+  player.volume = 0.001;              // 幾乎聽不見，但不是「靜音」
+  player.src    = 'videos/1.mp4';     // 隨便一部現成的，只是拿來換許可
 
+  const p = player.play();
+
+  // ② 拿到許可之後才收尾。這些都在 then 裡面，不影響上面的同步性
+  if (p && p.then) {
+    p.then(() => {
+      player.pause();
+      player.currentTime = 0;
+      player.volume = 1;              // 音量調回來，之後刷卡才聽得到
+    }).catch(() => {
+      // 萬一還是失敗（例如更嚴格的設定），至少不要卡住畫面
+      player.volume = 1;
+    });
+  } else {
+    player.volume = 1;
+  }
+
+  // ③ 這裡不呼叫 load()，也不清掉 src —— 清了許可會跟著沒
+  unlock.remove();
   keepAwake();
 });
 
@@ -506,8 +532,10 @@ function playVideo(n) {
   if (player.getAttribute('src') === src && player.readyState > 0) {
     player.currentTime = 0;
   } else {
+    // ⚠ 這裡不要呼叫 load()。設定 src 本來就會自動重載，
+    //   而 load() 會把解鎖時拿到的「有聲播放」許可清掉，
+    //   iPad 上第二部之後就會變成沒聲音。
     player.src = src;
-    player.load();
   }
 
   player.play().catch(() => backToIdle('影片播不起來，請再刷一次'));
