@@ -10,3 +10,10 @@ $RECYCLE.BIN/
 build/
 *.bin
 *.elf
+
+# 測試工具，不需要上傳
+node_modules/
+package.json
+package-lock.json
+test-results/
+tests/
