@@ -99,6 +99,8 @@ jobs:
               [ -e "$f" ] || continue
               case "$f" in
                 *.md|*.txt|*.gitkeep|*.part[0-9][0-9][0-9]) continue ;;
+                # 不是影片的東西，直接跳過（例如不小心拖進來的網頁存檔）
+                *.html|*.htm|*.pdf|*.zip|*.json|*.jpg|*.jpeg|*.png|*.gif) continue ;;
               esac
               src="$f"; break
             done

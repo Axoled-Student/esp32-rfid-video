@@ -200,8 +200,25 @@ function pick(n) {
   inp.click();
 }
 
+// 這些副檔名一定不是影片。拖曳進來的檔案不會經過 accept="video/*"，
+// 所以要在這裡自己擋，不然像 .html 這種東西會被當成影片傳上去。
+const NOT_VIDEO = /\.(html?|txt|md|pdf|zip|rar|7z|docx?|xlsx?|pptx?|jpe?g|png|gif|webp|svg|mp3|wav|m4a|json|js|css|exe|dmg)$/i;
+
 function accept(n, f) {
   const mb = f.size / 1048576;
+
+  // 副檔名明顯不對，或瀏覽器判定不是影片 → 擋下來
+  const looksWrong = NOT_VIDEO.test(f.name) ||
+                     (f.type && !f.type.startsWith('video/'));
+
+  if (looksWrong) {
+    alert(
+      `「${f.name}」看起來不是影片檔。\n\n` +
+      '這裡只收影片（mp4 / mov / avi / mkv 等）。\n' +
+      '如果你是想讓刷卡打開某個網站，改 assets/config.js 裡的網址就好，不用上傳檔案。'
+    );
+    return;
+  }
 
   if (mb > 100) {
     alert(`這個檔案有 ${mb.toFixed(0)}MB，超過 GitHub 的 100MB 上限。\n請把影片剪短，或先壓縮一下。`);
