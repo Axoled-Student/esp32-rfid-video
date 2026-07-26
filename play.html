@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>刷卡播放</title>
+<script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body {
+    background:#000; color:#eee;
+    font-family:system-ui,"Microsoft JhengHei","PingFang TC",sans-serif;
+  }
+
+  video { width:100%; height:100%; object-fit:contain; background:#000; display:block; }
+
+  /* ── 設定房間代號 ── */
+  #setup {
+    position:fixed; inset:0; z-index:100; background:#0d0d0f;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:18px; padding:24px; text-align:center;
+  }
+  #setup h1 { font-size:1.5rem; }
+  #setup p { color:#888; font-size:.92rem; max-width:400px; line-height:1.6; }
+  #setup input {
+    width:100%; max-width:340px; padding:13px 15px; font-size:1rem;
+    background:#16161a; border:1px solid #333; border-radius:9px; color:#eee;
+    text-align:center; font-family:ui-monospace,monospace;
+  }
+  #setup input:focus { outline:none; border-color:#2563eb; }
+  #setup button {
+    padding:13px 40px; font-size:1rem; font-weight:600; cursor:pointer;
+    background:#2563eb; color:#fff; border:none; border-radius:9px;
+  }
+  #setup button:hover { background:#1d4ed8; }
+
+  /* ── 待機畫面 ── */
+  #idle {
+    position:fixed; inset:0; z-index:10; background:#0d0d0f;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:22px; text-align:center; padding:24px;
+  }
+  #idle h1 { font-size:2.4rem; font-weight:600; letter-spacing:2px; }
+  #idle p  { color:#777; font-size:1rem; }
+  .dot { width:15px; height:15px; border-radius:50%; background:#4ade80; animation:blink 1.5s infinite; }
+  .dot.off { background:#666; animation:none; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.15} }
+
+  /* ── 連線狀態小燈 ── */
+  #conn {
+    position:fixed; top:14px; right:16px; z-index:50;
+    font-size:.78rem; color:#666; display:flex; align-items:center; gap:7px;
+    background:rgba(0,0,0,.55); padding:7px 12px; border-radius:99px;
+    backdrop-filter:blur(8px); transition:opacity .5s;
+  }
+  #conn .led { width:8px; height:8px; border-radius:50%; background:#666; }
+  #conn.ok   .led { background:#4ade80; }
+  #conn.bad  .led { background:#f87171; }
+
+  /* ── 影片標題 ── */
+  #title {
+    position:fixed; left:0; right:0; bottom:0; z-index:20;
+    padding:60px 24px 20px; font-size:1.15rem;
+    background:linear-gradient(transparent,rgba(0,0,0,.85));
+    opacity:0; transition:opacity .4s; pointer-events:none;
+  }
+  #title.show { opacity:1; }
+
+  /* ── 解鎖自動播放 ── */
+  #unlock {
+    position:fixed; inset:0; z-index:99; background:#0d0d0f;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; cursor:pointer; text-align:center; padding:24px;
+  }
+  #unlock h2 { font-size:1.5rem; }
+  #unlock span { color:#777; font-size:.9rem; }
+</style>
+</head>
+<body>
+
+<!-- 第一次要填房間代號 -->
+<div id="setup">
+  <h1>設定房間代號</h1>
+  <p>填跟 ESP32 程式裡一模一樣的代號，兩邊才連得上。</p>
+  <input id="roomInput" placeholder="房間代號" autocomplete="off">
+  <button id="roomGo">連線</button>
+</div>
+
+<!-- 點一下解鎖 -->
+<div id="unlock" style="display:none">
+  <h2>點一下畫面開始</h2>
+  <span>（瀏覽器規定要先互動才能自動播放）</span>
+</div>
+
+<!-- 待機 -->
+<div id="idle" style="display:none">
+  <div class="dot" id="idleDot"></div>
+  <h1>請刷卡</h1>
+  <p id="idleMsg">感應後自動播放對應影片</p>
+</div>
+
+<div id="conn"><span class="led"></span><span id="connText">連線中</span></div>
+
+<video id="player" playsinline></video>
+<div id="title"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+
+const player = $('#player');
+const idle   = $('#idle');
+const unlock = $('#unlock');
+const setup  = $('#setup');
+const title  = $('#title');
+const conn   = $('#conn');
+
+let ready   = false;   // 使用者點過畫面了沒
+let lastSeq = -1;      // 記住上一次的刷卡編號，避免重播
+let client  = null;
+
+// ---------- 房間代號 ----------
+// 網址可以直接帶：play.html?room=xxx
+const urlRoom = new URLSearchParams(location.search).get('room');
+const savedRoom = localStorage.getItem('rfidRoom');
+const room = urlRoom || savedRoom;
+
+if (room) {
+  start(room);
+} else {
+  setup.style.display = 'flex';
+}
+
+$('#roomGo').onclick = () => {
+  const r = $('#roomInput').value.trim();
+  if (!r) { alert('請填房間代號'); return; }
+  localStorage.setItem('rfidRoom', r);
+  setup.style.display = 'none';
+  start(r);
+};
+$('#roomInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('#roomGo').click();
+});
+
+// ---------- 開始連線 ----------
+function start(room) {
+  setup.style.display  = 'none';
+  unlock.style.display = 'flex';
+
+  const topic = 'esp32rfid/' + room;
+
+  client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
+    clientId: 'web-' + Math.random().toString(16).slice(2, 10),
+    reconnectPeriod: 3000,
+    connectTimeout: 10000,
+  });
+
+  client.on('connect', () => {
+    setConn('ok', '已連線');
+    client.subscribe(topic, err => {
+      if (err) setConn('bad', '訂閱失敗');
+    });
+  });
+
+  client.on('reconnect', () => setConn('', '重新連線中'));
+  client.on('offline',   () => setConn('bad', '離線'));
+  client.on('error',     () => setConn('bad', '連線錯誤'));
+
+  client.on('message', (t, payload) => {
+    let d;
+    try { d = JSON.parse(payload.toString()); } catch { return; }
+
+    if (d.type === 'online') {
+      $('#idleMsg').textContent = '讀卡機已連線，感應卡片即可播放';
+      return;
+    }
+
+    if (d.type !== 'play') return;
+
+    // seq 沒變 = 是舊訊息（MQTT 會保留最後一則），不要重播
+    if (d.seq === lastSeq) return;
+    lastSeq = d.seq;
+
+    if (ready) play(d.video);
+  });
+}
+
+function setConn(cls, text) {
+  conn.className = cls;
+  $('#connText').textContent = text;
+  $('#idleDot').className = cls === 'ok' ? 'dot' : 'dot off';
+
+  // 連上之後 3 秒把小燈淡掉，不擋畫面
+  if (cls === 'ok') setTimeout(() => conn.style.opacity = '0', 3000);
+  else conn.style.opacity = '1';
+}
+
+// ---------- 解鎖自動播放 ----------
+unlock.onclick = () => {
+  unlock.style.display = 'none';
+  idle.style.display   = 'flex';
+  ready = true;
+
+  // 偷偷播一下空影片，換取瀏覽器的自動播放許可
+  player.play().catch(() => {});
+};
+
+// ---------- 播放 ----------
+function play(n) {
+  if (n < 1 || n > 8) return;
+
+  idle.style.display = 'none';
+  title.textContent = '影片 ' + n;
+  title.classList.add('show');
+
+  player.src = 'videos/' + n + '.mp4';
+  player.play().catch(() => {});
+
+  setTimeout(() => title.classList.remove('show'), 3000);
+}
+
+// 播完回到待機
+player.addEventListener('ended', () => {
+  idle.style.display = 'flex';
+  title.classList.remove('show');
+});
+
+// 影片載入失敗
+player.addEventListener('error', () => {
+  idle.style.display = 'flex';
+  $('#idleMsg').textContent = '影片載入失敗，請確認已上傳';
+});
+</script>
+</body>
+</html>

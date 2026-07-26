@@ -26,6 +26,17 @@
   button:hover  { background:#2a2a32; border-color:#555; }
   button.active { background:#2563eb; border-color:#2563eb; }
   #msg { margin-top:16px; color:#f87171; font-size:.9rem; min-height:1.2em; }
+  .links { display:flex; gap:10px; flex-wrap:wrap; margin-top:22px; }
+  .uplink {
+    display:inline-block; padding:12px 20px;
+    background:#1c1c21; border:1px solid #333; border-radius:8px;
+    color:#60a5fa; text-decoration:none; font-size:.92rem; transition:.15s;
+  }
+  .uplink:hover { background:#2a2a32; border-color:#555; }
+  .uplink.main {
+    background:#2563eb; border-color:#2563eb; color:#fff; font-weight:600;
+  }
+  .uplink.main:hover { background:#1d4ed8; }
 </style>
 </head>
 <body>
@@ -40,6 +51,11 @@
 
   <div class="btns" id="btns"></div>
   <div id="msg"></div>
+
+  <div class="links">
+    <a href="play.html" class="uplink main">▶ 開啟刷卡播放頁</a>
+    <a href="upload.html" class="uplink">→ 上傳／換影片</a>
+  </div>
 </div>
 
 <script>

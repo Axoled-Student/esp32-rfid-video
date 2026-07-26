@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>影片上傳面板</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#0d0d0f; color:#eee; min-height:100vh; padding:24px 16px;
+    font-family:system-ui,"Microsoft JhengHei","PingFang TC",sans-serif;
+    line-height:1.6;
+  }
+  .wrap { max-width:760px; margin:0 auto; }
+
+  h1 { font-size:1.6rem; margin-bottom:6px; }
+  .sub { color:#888; font-size:.92rem; margin-bottom:22px; }
+
+  .card {
+    background:#16161a; border:1px solid #2a2a32;
+    border-radius:12px; padding:18px; margin-bottom:16px;
+  }
+  .card h2 { font-size:1.05rem; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+  .card h2 .n {
+    background:#2563eb; width:22px; height:22px; border-radius:50%;
+    font-size:.8rem; display:grid; place-items:center; flex:none;
+  }
+
+  /* 金鑰輸入 */
+  .keyrow { display:flex; gap:8px; flex-wrap:wrap; }
+  input[type=password], input[type=text] {
+    flex:1; min-width:200px; padding:11px 13px; font-size:.95rem;
+    background:#0d0d0f; border:1px solid #333; border-radius:8px; color:#eee;
+    font-family:ui-monospace,monospace;
+  }
+  input:focus { outline:none; border-color:#2563eb; }
+
+  button {
+    padding:11px 20px; font-size:.95rem; font-weight:600; cursor:pointer;
+    background:#2563eb; color:#fff; border:none; border-radius:8px;
+    transition:.15s; white-space:nowrap;
+  }
+  button:hover:not(:disabled) { background:#1d4ed8; }
+  button:disabled { background:#333; color:#777; cursor:not-allowed; }
+  button.ghost { background:#26262e; border:1px solid #3a3a44; }
+  button.ghost:hover:not(:disabled) { background:#32323c; }
+
+  .hint { font-size:.85rem; color:#777; margin-top:10px; }
+  .hint a { color:#60a5fa; }
+
+  /* 8 個影片格 */
+  .slots { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
+  .slot {
+    background:#0d0d0f; border:1.5px dashed #333; border-radius:10px;
+    padding:14px 12px; cursor:pointer; transition:.15s; text-align:center;
+  }
+  .slot:hover { border-color:#2563eb; background:#12121a; }
+  .slot.filled { border-style:solid; border-color:#22c55e; background:#0f1a12; }
+  .slot .num { font-size:1.5rem; font-weight:700; color:#555; }
+  .slot.filled .num { color:#22c55e; }
+  .slot .name {
+    font-size:.78rem; color:#999; margin-top:4px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .slot.filled .name { color:#86efac; }
+
+  /* 進度 */
+  #progress { display:none; }
+  .bar { height:8px; background:#26262e; border-radius:99px; overflow:hidden; margin-bottom:12px; }
+  .bar > i { display:block; height:100%; width:0; background:#2563eb; transition:width .3s; }
+  #log {
+    background:#0a0a0c; border:1px solid #26262e; border-radius:8px;
+    padding:12px; font-size:.85rem; font-family:ui-monospace,monospace;
+    max-height:220px; overflow-y:auto; white-space:pre-wrap; color:#aaa;
+  }
+  #log .ok  { color:#4ade80; }
+  #log .err { color:#f87171; }
+  #log .warn{ color:#fbbf24; }
+
+  .banner {
+    padding:12px 14px; border-radius:8px; font-size:.9rem; margin-bottom:14px;
+  }
+  .banner.warn { background:#2a2010; border:1px solid #6b4a10; color:#fcd34d; }
+  .banner.ok   { background:#0f1f14; border:1px solid #1a5c32; color:#86efac; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>影片上傳面板</h1>
+  <p class="sub">選好影片按上傳，雲端會自動轉檔，什麼格式都可以 🎬</p>
+
+  <!-- 步驟 1：金鑰 -->
+  <div class="card">
+    <h2><span class="n">1</span>貼上你的金鑰</h2>
+    <div class="keyrow">
+      <input type="password" id="token" placeholder="ghp_ 開頭那一串" autocomplete="off">
+      <button class="ghost" id="saveKey">記住</button>
+    </div>
+    <p class="hint">
+      金鑰只存在你自己的瀏覽器，不會傳給任何人。
+      <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=影片上傳面板" target="_blank">按這裡去拿一組 →</a>
+    </p>
+  </div>
+
+  <!-- 步驟 2：選影片 -->
+  <div class="card">
+    <h2><span class="n">2</span>選影片</h2>
+    <div class="slots" id="slots"></div>
+    <p class="hint">點方格選檔案。不用 8 部都選，選幾部傳幾部。單檔請低於 100MB。</p>
+  </div>
+
+  <!-- 步驟 3：上傳 -->
+  <div class="card">
+    <h2><span class="n">3</span>開始上傳</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="go" style="flex:1;min-width:180px">開始上傳</button>
+      <button class="ghost" onclick="location.href='./'">看網站</button>
+      <button class="ghost" id="viewActions">看轉檔進度</button>
+    </div>
+
+    <div id="progress" style="margin-top:16px">
+      <div class="bar"><i id="barFill"></i></div>
+      <div id="log"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── 設定（如果你 fork 了這個專案，改這兩行）──────────────
+const OWNER = 'vin836';
+const REPO  = 'esp32-rfid-video';
+const BRANCH = 'main';
+// ────────────────────────────────────────────────
+
+const $ = s => document.querySelector(s);
+const files = {};            // { 1: File, 2: File, ... }
+
+// ---------- 金鑰記憶 ----------
+const saved = localStorage.getItem('ghToken');
+if (saved) $('#token').value = saved;
+
+$('#saveKey').onclick = () => {
+  const t = $('#token').value.trim();
+  if (!t) { localStorage.removeItem('ghToken'); alert('已清除'); return; }
+  localStorage.setItem('ghToken', t);
+  alert('記住了，下次不用再貼');
+};
+
+$('#viewActions').onclick = () =>
+  window.open(`https://github.com/${OWNER}/${REPO}/actions`, '_blank');
+
+// ---------- 建立 8 個格子 ----------
+const slots = $('#slots');
+for (let i = 1; i <= 8; i++) {
+  const d = document.createElement('div');
+  d.className = 'slot';
+  d.id = 'slot' + i;
+  d.innerHTML = `<div class="num">${i}</div><div class="name">點這裡選檔案</div>`;
+  d.onclick = () => pick(i);
+  slots.appendChild(d);
+}
+
+function pick(n) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'video/*';
+  inp.onchange = () => {
+    const f = inp.files[0];
+    if (!f) return;
+
+    const mb = f.size / 1048576;
+    if (mb > 100) {
+      alert(`這個檔案有 ${mb.toFixed(0)}MB，超過 GitHub 的 100MB 上限。\n請把影片剪短一點再試。`);
+      return;
+    }
+
+    files[n] = f;
+    const el = document.getElementById('slot' + n);
+    el.classList.add('filled');
+    el.querySelector('.name').textContent = `${f.name} (${mb.toFixed(1)}MB)`;
+  };
+  inp.click();
+}
+
+// ---------- 記錄訊息 ----------
+function say(msg, cls = '') {
+  const log = $('#log');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+const setBar = pct => $('#barFill').style.width = pct + '%';
+
+// ---------- 檔案轉 base64（GitHub API 要這格式）----------
+function toBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload  = () => resolve(r.result.split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+// ---------- 呼叫 GitHub ----------
+async function gh(path, opts = {}) {
+  const token = $('#token').value.trim();
+  const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}${path}`, {
+    ...opts,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      ...(opts.headers || {}),
+    },
+  });
+  return res;
+}
+
+// ---------- 上傳主流程 ----------
+$('#go').onclick = async () => {
+  const token = $('#token').value.trim();
+  const list  = Object.keys(files).map(Number).sort((a, b) => a - b);
+
+  if (!token)       { alert('請先貼上金鑰'); return; }
+  if (!list.length) { alert('還沒選任何影片喔'); return; }
+
+  $('#go').disabled = true;
+  $('#go').textContent = '上傳中...';
+  $('#progress').style.display = 'block';
+  $('#log').innerHTML = '';
+  setBar(0);
+
+  try {
+    // 先確認金鑰有效
+    say('檢查金鑰...');
+    const check = await gh('');
+    if (check.status === 401) { say('金鑰無效或已過期', 'err'); return; }
+    if (check.status === 404) { say('找不到倉庫，或金鑰沒有權限', 'err'); return; }
+    if (!check.ok)            { say(`連線失敗 (${check.status})`, 'err'); return; }
+    say('金鑰沒問題', 'ok');
+
+    // 一部一部傳
+    let done = 0;
+    for (const n of list) {
+      const f    = files[n];
+      const ext  = (f.name.match(/\.[^.]+$/) || ['.mp4'])[0].toLowerCase();
+      const path = `raw/${n}${ext}`;
+
+      say(`\n第 ${n} 部：${f.name}`);
+      say('  轉換中...');
+      const content = await toBase64(f);
+
+      // 同編號的舊檔如果副檔名不同，先刪掉，避免兩個檔案打架
+      for (const old of ['.mp4','.mov','.avi','.mkv','.webm','.m4v','.wmv','.flv','.mpg','.mpeg']) {
+        if (old === ext) continue;
+        const p = `raw/${n}${old}`;
+        const r = await gh(`/contents/${p}?ref=${BRANCH}`);
+        if (r.ok) {
+          const info = await r.json();
+          await gh(`/contents/${p}`, {
+            method: 'DELETE',
+            body: JSON.stringify({ message: `移除舊的 ${p}`, sha: info.sha, branch: BRANCH }),
+          });
+          say(`  清掉舊檔 ${p}`, 'warn');
+        }
+      }
+
+      // 有舊檔就要帶 sha 才能覆蓋
+      let sha;
+      const exist = await gh(`/contents/${path}?ref=${BRANCH}`);
+      if (exist.ok) sha = (await exist.json()).sha;
+
+      say('  上傳中...');
+      const put = await gh(`/contents/${path}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          message: `更新第 ${n} 部影片`,
+          content, branch: BRANCH,
+          ...(sha ? { sha } : {}),
+        }),
+      });
+
+      if (!put.ok) {
+        const e = await put.json().catch(() => ({}));
+        say(`  失敗：${e.message || put.status}`, 'err');
+        if (put.status === 403) say('  （可能是檔案太大，GitHub 單檔上限 100MB）', 'warn');
+        continue;
+      }
+
+      done++;
+      say(`  第 ${n} 部好了`, 'ok');
+      setBar(Math.round((done / list.length) * 90));
+    }
+
+    setBar(100);
+    say('\n────────────────────');
+    say(`上傳完成，共 ${done} 部`, 'ok');
+    say('雲端正在自動轉檔，約 3~5 分鐘');
+    say('可以按「看轉檔進度」看目前跑到哪');
+
+  } catch (err) {
+    say(`\n出錯了：${err.message}`, 'err');
+  } finally {
+    $('#go').disabled = false;
+    $('#go').textContent = '開始上傳';
+  }
+};
+</script>
+</body>
+</html>
