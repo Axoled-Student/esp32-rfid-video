@@ -399,12 +399,17 @@ function setConn(cls, text) {
  * 對 HTMLMediaElement.volume 的設定，所以 0.001 仍可能用系統音量播放。
  */
 
-const unlockSrc = 'videos/5_second_silent.mp4?v=4';
+const unlockSrc = 'videos/5_second_silent.mp4?v=5';
 
 // 先載入解鎖影片；使用者真正點下去時只做同步 play()。
 // 這樣可以避開 iPad 在 click 裡剛換 src 時偶發的播放失敗。
 player.preload = 'auto';
 player.src = unlockSrc;
+
+// iPad Safari 對 display:none 的 media element 有額外限制。
+// 先讓同一個 <video> 真正進入 render tree；unlock/idle overlay 的 z-index
+// 都比它高，所以畫面仍然只會看到「點一下畫面開始」。
+player.classList.add('on');
 
 unlock.addEventListener('click', () => {
   if (ready) return;
@@ -426,15 +431,28 @@ unlock.addEventListener('click', () => {
       if (mode === 'idle' && player.getAttribute('src') === unlockSrc) {
         player.pause();
         try { player.currentTime = 0; } catch {}
+        player.classList.remove('on');
       }
     }, 150);
   };
 
   if (p && p.then) {
     p.then(finishUnlock).catch(err => {
-      console.warn('iPad media unlock failed:', err);
+      const mediaErr = player.error;
+      console.warn('iPad media unlock failed:', {
+        name: err?.name,
+        message: err?.message,
+        mediaErrorCode: mediaErr?.code ?? null,
+        mediaErrorMessage: mediaErr?.message ?? null,
+        readyState: player.readyState,
+        networkState: player.networkState,
+        currentSrc: player.currentSrc
+      });
       const msg = unlock.querySelector('p');
-      if (msg) msg.textContent = '影片播放啟用失敗，請再點一下畫面';
+      if (msg) {
+        const detail = err?.name || 'DOMException';
+        msg.textContent = `影片播放啟用失敗（${detail}），請再點一下畫面`;
+      }
       // 不移除 unlock，讓使用者可以再試一次。
     });
   } else {
