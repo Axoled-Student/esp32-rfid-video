@@ -385,79 +385,41 @@ function setConn(cls, text) {
 }
 
 /* ══════════════════════════════════════════════════════
- *  解鎖 —— iPad Safari：第一次有聲播放必須直接來自使用者手勢
+ *  解鎖 —— iPad Safari 規定：要有手勢，影片才准出聲
  * ══════════════════════════════════════════════════════ */
 
 /*
- * iPad Safari / WebKit：第一次有聲播放必須直接由使用者手勢觸發。
+ * 這裡刻意保留原本已在 iPad 實測成功的解鎖流程：
+ * 同一個 player、click handler 內同步 play()、不 muted、不呼叫 load()。
  *
- * IMPORTANT:
- * videos/5_second_silent.mp4 必須包含「真正的 AAC 音軌」，只是音訊資料
- * 全部為 digital silence。不能使用完全沒有 audio track 的 MP4。
- *
- * 也不要靠 player.volume 降音量。iPadOS Safari 可能忽略 JavaScript
- * 對 HTMLMediaElement.volume 的設定，所以 0.001 仍可能用系統音量播放。
+ * 唯一差別是解鎖來源改成 videos/unlock.mp4。
+ * unlock.mp4 是直接由原本能正常解鎖的 1.mp4 製作：
+ * H.264 視訊串流保持不變，AAC 音軌被壓到約 -91 dBFS，因此實際聽不到，
+ * 但檔案仍然有真正的 audio track，Safari 會走「有聲媒體」的解鎖路徑。
  */
 
-const unlockSrc = 'videos/5_second_silent.mp4?v=5';
-
-// 先載入解鎖影片；使用者真正點下去時只做同步 play()。
-// 這樣可以避開 iPad 在 click 裡剛換 src 時偶發的播放失敗。
-player.preload = 'auto';
-player.src = unlockSrc;
-
-// iPad Safari 對 display:none 的 media element 有額外限制。
-// 先讓同一個 <video> 真正進入 render tree；unlock/idle overlay 的 z-index
-// 都比它高，所以畫面仍然只會看到「點一下畫面開始」。
-player.classList.add('on');
-
 unlock.addEventListener('click', () => {
-  if (ready) return;
+  ready = true;
 
-  // 必須保持 unmuted；AAC 軌本身就是 digital silence，所以不會有聲音。
+  // 必須直接在使用者 click 事件內，用同一個 player 做未靜音播放。
   player.muted = false;
-  player.defaultMuted = false;
+  player.src = 'videos/unlock.mp4?v=1';
 
-  // 必須直接在 click handler 內 play()；前面不要 await。
   const p = player.play();
 
-  const finishUnlock = () => {
-    ready = true;
-    unlock.remove();
-    keepAwake();
-
-    // 讓 WebKit 確實進入 playing 狀態，再暫停解鎖片。
-    setTimeout(() => {
-      if (mode === 'idle' && player.getAttribute('src') === unlockSrc) {
-        player.pause();
-        try { player.currentTime = 0; } catch {}
-        player.classList.remove('on');
-      }
-    }, 150);
-  };
-
+  // play() 成功代表這個 player 已經由使用者手勢啟用。
+  // 不呼叫 load()、不清 src，保留同一個 media element 的播放許可。
   if (p && p.then) {
-    p.then(finishUnlock).catch(err => {
-      const mediaErr = player.error;
-      console.warn('iPad media unlock failed:', {
-        name: err?.name,
-        message: err?.message,
-        mediaErrorCode: mediaErr?.code ?? null,
-        mediaErrorMessage: mediaErr?.message ?? null,
-        readyState: player.readyState,
-        networkState: player.networkState,
-        currentSrc: player.currentSrc
-      });
-      const msg = unlock.querySelector('p');
-      if (msg) {
-        const detail = err?.name || 'DOMException';
-        msg.textContent = `影片播放啟用失敗（${detail}），請再點一下畫面`;
-      }
-      // 不移除 unlock，讓使用者可以再試一次。
+    p.then(() => {
+      player.pause();
+      player.currentTime = 0;
+    }).catch(err => {
+      console.warn('iPad media unlock failed:', err);
     });
-  } else {
-    finishUnlock();
   }
+
+  unlock.remove();
+  keepAwake();
 });
 
 /* ══════════════════════════════════════════════════════
