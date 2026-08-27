@@ -411,7 +411,7 @@ unlock.addEventListener('click', () => {
   // ① 同步、不靜音地播 —— 這一步就是在換許可，不能 await
   player.muted  = false;
   player.volume = 0.001;              // 幾乎聽不見，但不是「靜音」
-  player.src    = 'videos/1.mp4';     // 隨便一部現成的，只是拿來換許可
+  player.src    = 'videos/5_second_silent.mp4';     // 隨便一部現成的，只是拿來換許可
 
   const p = player.play();
 
