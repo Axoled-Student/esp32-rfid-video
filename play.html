@@ -399,15 +399,19 @@ function setConn(cls, text) {
  * 對 HTMLMediaElement.volume 的設定，所以 0.001 仍可能用系統音量播放。
  */
 
+const unlockSrc = 'videos/5_second_silent.mp4?v=3';
+
+// 先載入解鎖影片；使用者真正點下去時只做同步 play()。
+// 這樣可以避開 iPad 在 click 裡剛換 src 時偶發的播放失敗。
+player.preload = 'auto';
+player.src = unlockSrc;
+
 unlock.addEventListener('click', () => {
   if (ready) return;
-
-  const unlockSrc = 'videos/5_second_silent.mp4';
 
   // 必須保持 unmuted；AAC 軌本身就是 digital silence，所以不會有聲音。
   player.muted = false;
   player.defaultMuted = false;
-  player.src = unlockSrc;
 
   // 必須直接在 click handler 內 play()；前面不要 await。
   const p = player.play();
