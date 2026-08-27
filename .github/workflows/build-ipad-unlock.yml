@@ -43,7 +43,9 @@ jobs:
           # Audio must exist AND be digital silence.
           ffmpeg -hide_banner -i videos/unlock.mp4 -map 0:a:0             -af volumedetect -f null - 2> /tmp/vol.txt
           cat /tmp/vol.txt
-          grep -q 'max_volume: -inf dB' /tmp/vol.txt
+          max_db=$(grep 'max_volume:' /tmp/vol.txt | tail -1 | awk '{print $5}')
+          echo "Measured max audio level: $max_db dBFS"
+          awk -v v="$max_db" 'BEGIN { if (v <= -80) exit 0; exit 1 }'
 
           # Sanity checks.
           test "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 videos/unlock.mp4)" = "h264"
