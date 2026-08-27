@@ -385,53 +385,57 @@ function setConn(cls, text) {
 }
 
 /* ══════════════════════════════════════════════════════
- *  解鎖 —— iPad Safari 規定：要有手勢，影片才准出聲
+ *  解鎖 —— iPad Safari：第一次有聲播放必須直接來自使用者手勢
  * ══════════════════════════════════════════════════════ */
 
-/* iPad Safari 規定：影片要出聲音，必須由使用者的手勢觸發播放。
- * 之後 ESP32 送訊息過來時沒有手勢，所以要趁這一下把「許可」拿到手。
+/*
+ * iPad Safari / WebKit：第一次有聲播放必須直接由使用者手勢觸發。
  *
- * ⚠ 這段有三件事絕對不能改，改了 iPad 上就會沒聲音：
+ * IMPORTANT:
+ * videos/5_second_silent.mp4 必須包含「真正的 AAC 音軌」，只是音訊資料
+ * 全部為 digital silence。不能使用完全沒有 audio track 的 MP4。
  *
- *   1. 不能靜音播。靜音播放本來就不需要許可，
- *      所以靜音成功換不到「有聲播放」的許可。
- *
- *   2. 不能在 play() 之前 await 任何東西。手勢的效力只在這個
- *      事件的同步執行期間，await 一下就過期了。
- *
- *   3. 事後不能呼叫 load()，那會把剛拿到的許可清掉。
- *
- * 做法：把音量壓到幾乎為零（不是靜音）播一下現成的影片，
- * 在手勢當下同步呼叫。這樣既拿得到許可，觀眾也聽不到聲音。
- * 播完馬上暫停、音量調回來，整個過程不到一秒。 */
+ * 也不要靠 player.volume 降音量。iPadOS Safari 可能忽略 JavaScript
+ * 對 HTMLMediaElement.volume 的設定，所以 0.001 仍可能用系統音量播放。
+ */
 
 unlock.addEventListener('click', () => {
-  ready = true;
+  if (ready) return;
 
-  // ① 同步、不靜音地播 —— 這一步就是在換許可，不能 await
-  player.muted  = false;
-  player.volume = 0.001;              // 幾乎聽不見，但不是「靜音」
-  player.src    = 'videos/5_second_silent.mp4';     // 隨便一部現成的，只是拿來換許可
+  const unlockSrc = 'videos/5_second_silent.mp4';
 
+  // 必須保持 unmuted；AAC 軌本身就是 digital silence，所以不會有聲音。
+  player.muted = false;
+  player.defaultMuted = false;
+  player.src = unlockSrc;
+
+  // 必須直接在 click handler 內 play()；前面不要 await。
   const p = player.play();
 
-  // ② 拿到許可之後才收尾。這些都在 then 裡面，不影響上面的同步性
+  const finishUnlock = () => {
+    ready = true;
+    unlock.remove();
+    keepAwake();
+
+    // 讓 WebKit 確實進入 playing 狀態，再暫停解鎖片。
+    setTimeout(() => {
+      if (mode === 'idle' && player.getAttribute('src') === unlockSrc) {
+        player.pause();
+        try { player.currentTime = 0; } catch {}
+      }
+    }, 150);
+  };
+
   if (p && p.then) {
-    p.then(() => {
-      player.pause();
-      player.currentTime = 0;
-      player.volume = 1;              // 音量調回來，之後刷卡才聽得到
-    }).catch(() => {
-      // 萬一還是失敗（例如更嚴格的設定），至少不要卡住畫面
-      player.volume = 1;
+    p.then(finishUnlock).catch(err => {
+      console.warn('iPad media unlock failed:', err);
+      const msg = unlock.querySelector('p');
+      if (msg) msg.textContent = '影片播放啟用失敗，請再點一下畫面';
+      // 不移除 unlock，讓使用者可以再試一次。
     });
   } else {
-    player.volume = 1;
+    finishUnlock();
   }
-
-  // ③ 這裡不呼叫 load()，也不清掉 src —— 清了許可會跟著沒
-  unlock.remove();
-  keepAwake();
 });
 
 /* ══════════════════════════════════════════════════════
