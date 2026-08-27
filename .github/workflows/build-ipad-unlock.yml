@@ -66,3 +66,5 @@ jobs:
           git add videos/ipad_unlock_silent.mp4
           git commit -m "Build iPad unlock clip from working 1.mp4"
           git push
+
+# retry after assertion fix
