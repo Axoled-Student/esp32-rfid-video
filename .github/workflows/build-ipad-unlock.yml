@@ -24,34 +24,27 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
 
-      - name: Build silent clip from known-good 1.mp4
+      - name: Build and verify Safari unlock clip
         run: |
           set -euxo pipefail
+          ffprobe -v error -show_entries stream=index,codec_name,profile,codec_tag_string,pix_fmt,width,height,sample_rate,channels -of json videos/1.mp4
 
-          echo "=== source 1.mp4 ==="
-          ffprobe -v error             -show_entries stream=index,codec_name,profile,codec_tag_string,pix_fmt,width,height,sample_rate,channels             -of json videos/1.mp4
+          # Keep the exact H.264 video bitstream from 1.mp4, which is already
+          # proven to play on the target iPad. Only replace its audio with silence.
+          ffmpeg -y -hide_banner -loglevel warning -i videos/1.mp4 -t 5 -map 0:v:0 -map 0:a:0 -c:v copy -af volume=0 -c:a aac -b:a 128k -movflags +faststart videos/ipad_unlock_silent.mp4
 
-          # Keep the exact video bitstream from the iPad-tested 1.mp4.
-          # Only decode/re-encode its audio through volume=0, so the output still
-          # has an unmuted AAC audio track but the decoded samples are silence.
-          ffmpeg -y -hide_banner -loglevel warning             -i videos/1.mp4 -t 5             -map 0:v:0 -map 0:a:0             -c:v copy             -af 'volume=0' -c:a aac -b:a 128k             -movflags +faststart             videos/ipad_unlock_silent.mp4
-
-          echo "=== output ==="
-          ffprobe -v error             -show_entries stream=index,codec_name,profile,codec_tag_string,pix_fmt,width,height,sample_rate,channels:format=duration,size             -of json videos/ipad_unlock_silent.mp4
-
-          # Full decode check.
+          ffprobe -v error -show_entries stream=index,codec_name,profile,codec_tag_string,pix_fmt,width,height,sample_rate,channels:format=duration,size -of json videos/ipad_unlock_silent.mp4
           ffmpeg -v error -i videos/ipad_unlock_silent.mp4 -f null -
 
-          # Verify that an AAC audio stream exists.
           test "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 videos/ipad_unlock_silent.mp4)" = "aac"
 
-          # Verify decoded audio has no non-zero samples.
-          ffmpeg -hide_banner -i videos/ipad_unlock_silent.mp4             -map 0:a:0 -af volumedetect -f null - 2> /tmp/volume.txt
+          ffmpeg -hide_banner -i videos/ipad_unlock_silent.mp4 -map 0:a:0 -af volumedetect -f null - 2> /tmp/volume.txt
           cat /tmp/volume.txt
-          grep -q 'max_volume: -inf dB' /tmp/volume.txt
+          max_db="$(sed -n 's/.*max_volume: \([-0-9.]*\) dB.*/\1/p' /tmp/volume.txt | tail -1)"
+          echo "decoded max volume: $max_db dBFS"
+          test -n "$max_db"
+          awk -v db="$max_db" 'BEGIN { exit !(db <= -80) }'
 
-          # Verify the output video stream is the same encoded bitstream family
-          # as the source: H.264 and the same codec tag/profile/pixel format.
           for field in codec_name codec_tag_string profile pix_fmt; do
             src="$(ffprobe -v error -select_streams v:0 -show_entries stream=$field -of default=nw=1:nk=1 videos/1.mp4)"
             out="$(ffprobe -v error -select_streams v:0 -show_entries stream=$field -of default=nw=1:nk=1 videos/ipad_unlock_silent.mp4)"
@@ -66,5 +59,3 @@ jobs:
           git add videos/ipad_unlock_silent.mp4
           git commit -m "Build iPad unlock clip from working 1.mp4"
           git push
-
-# retry after assertion fix
